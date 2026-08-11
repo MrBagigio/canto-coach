@@ -12,7 +12,7 @@ invece di aggirarlo).
 - In locale: `node tools/serve.mjs` → 4181 (voce `canto` nel launch.json di MetaUpgrader)
 - Per pubblicare: `node tools/carica-commit.mjs` (prova a vuoto) poi `--scrivi`. Da qui la
   spinta con git è bloccata dall'hook, si passa dalla API Git Data.
-- **Banco: [`collaudo.html`](collaudo.html) — 242 prove, tutte verdi.**
+- **Banco: [`collaudo.html`](collaudo.html) — 328 prove, tutte verdi.**
 - **Sul telefono: [`prova-zero.html`](prova-zero.html)** — misura la tua stanza e la tua voce.
 
 Il motore viene da [ukulele-coach](../ukulele-coach) (`js/pitch.js`). Le prove 0–4
@@ -21,20 +21,33 @@ hanno trovato due difetti veri e smentito uno dei tre sospetti del documento.
 
 ## Gli esercizi
 
-`index.html` è l'app. Cinque esercizi del §2, nell'ordine del documento, tutti costruiti
-sullo stesso motore: **l'app dà la nota → TACE → tu canti → l'app misura**. L'alternanza
-non è una scelta di interfaccia, è la ragione per cui la misura è credibile, e sta scritta
-in un posto solo (`giro()` in `js/app.js`) così non può divergere fra una schermata e
-l'altra. Il collaudo la verifica in dB: mentre l'app misura, dalla sua uscita escono
-**−180 dBFS, 162 dB sotto** il livello della nota.
+`index.html` è l'app: **PWA installabile**, funziona senza rete, dieci esercizi — i gradini
+del §2 nell'ordine del documento, ognuno con un criterio d'uscita misurato in
+`js/percorso.js`. Tutti costruiti sullo stesso motore: **l'app dà la nota → TACE → tu canti
+→ l'app misura**. L'alternanza non è una scelta di interfaccia, è la ragione per cui la
+misura è credibile, e sta scritta in un posto solo (`giro()` in `js/app.js`) così non può
+divergere fra una schermata e l'altra. Il collaudo la verifica in dB: mentre l'app misura,
+dalla sua uscita escono **−180 dBFS, 162 dB sotto** il livello della nota.
 
-| esercizio | cosa misura |
-|---|---|
-| Nota tenuta | intonazione media, calo, vibrato o fermezza |
-| La tua estensione | i due numeri da cui l'app ricava tutte le note che ti darà |
-| Attacco pulito | i primi 150 ms contro il resto della *tua* nota |
-| Intervalli | la distanza cantata, non l'intonazione assoluta |
-| Fiato | secondi **dentro tolleranza**, non secondi di rumore |
+| esercizio | cosa misura | criterio d'uscita |
+|---|---|---|
+| Nota tenuta | intonazione media, calo, vibrato o fermezza | due tenute dentro, di fila |
+| La tua estensione | i due numeri da cui l'app ricava tutte le note che ti darà | misurata una volta |
+| Il tuo passaggio | dove livello e timbro fanno un gradino salendo | provato — «non trovato» è una risposta |
+| Attacco pulito | i primi 150 ms contro il resto della *tua* nota | tre attacchi puliti di fila |
+| Intervalli | la distanza cantata, non l'intonazione assoluta | quattro giusti di fila |
+| Fiato | secondi **dentro tolleranza**, non secondi di rumore | 12 secondi |
+| Scale e agilità | note prese **e** tempo, insieme | una scala pulita a tempo |
+| Orecchio | riconoscere, non produrre — con ripetizione spaziata | tutti al secondo ripasso |
+| Canta quello che suoni | il ponte fra strumento e voce, qualunque strumento | tre note riprese |
+| Melodie | melodie **generate**, mai copiate | due prese tutte |
+
+**Il diritto d'autore, risolto generando** (§6). Una sequenza di accordi non è protetta — e
+infatti le altre tre app hanno una libreria di giri — ma una melodia sì: è proprio quello
+che il diritto d'autore protegge in una canzone. Le melodie qui camminano sui gradi di una
+scala, deterministiche dato un seme, e il collaudo verifica su sette semi che partano e
+finiscano sulla tonica, non escano dall'ambito, non facciano salti oltre la quinta, non
+ripetano due note uguali di fila e non contengano tritoni.
 
 **Partenza a freddo, senza tabelle di tipi vocali.** La prima volta l'app non sa dove sta
 comoda la tua voce, e darti una nota a caso vorrebbe dire darti quella di un altro
@@ -48,10 +61,12 @@ lo strumento sbaglia al massimo 7,5 centesimi, e il collaudo verifica che ci sia
 fattore quattro fra i due, altrimenti l'app starebbe giudicando il rumore della propria
 misura e lo chiamerebbe intonazione.
 
-### Quattro difetti trovati GUIDANDO l'app, non leggendo il codice
+### Sette difetti trovati GUIDANDO l'app, non leggendo il codice
 
-Nessuno dei quattro dava un errore in console, e il collaudo era verde con tutti e quattro
-dentro (vedi [[feedback-verify-everything-except-looking]] negli altri progetti).
+Nessuno dei sette dava un errore in console, e il collaudo era verde con tutti e sette
+dentro. Il metodo: un **cantante sintetico** che legge l'istruzione a schermo («tieni il
+Sol3», «ripetila dal Fa♯3») e canta quella nota attraverso la vera `getUserMedia`. Fa
+quello che farebbe una persona, e trova quello che una persona troverebbe.
 
 1. **«voce ferma, oscillazione ±135 centesimi»** — una frase che si contraddice da sola.
    `scomponi` lo sapeva già (restituisce «oscillazione non periodica: è instabilità, non
@@ -69,6 +84,22 @@ dentro (vedi [[feedback-verify-everything-except-looking]] negli altri progetti)
 4. **Un'estensione di zero semitoni veniva salvata** e poi usata per decidere ogni nota
    successiva: un'app che ti fa cantare per sempre lo stesso La3, convinta di sapere
    qualcosa di te. Sotto i tre semitoni ora non si salva niente e si dice perché.
+
+5. **Un passaggio di registro dichiarato con un gradino di −0,0 dB.** Il punteggio è un
+   rapporto contro il passo tipico del glissando, e un rapporto ha un buco nero al
+   denominatore: su una salita liscia il passo tipico tende a zero e qualunque bricciolo
+   diventa «dieci volte il tipico». Ora oltre al rapporto serve una dimensione assoluta —
+   2 dB o 0,12 di timbro — sotto cui non è un passaggio, è il microfono.
+6. **Una scheda dell'orecchio mai vista passava davanti ai ripassi in ritardo.** Una scheda
+   nuova ha `quando: 0`, quindi risultava la più scaduta di tutte: il file dichiarava
+   «prima le scadute, poi le nuove» e il codice faceva l'opposto. Un ripasso scaduto ha una
+   fretta che una scheda nuova non ha — sta per essere dimenticato.
+7. **Melodie con due note uguali di fila e con un tritono.** Due note identiche attaccate
+   sono una nota lunga per il microfono: l'esercizio ne conterebbe una come mancata,
+   bocciando chi ha fatto giusto — un limite della misura si toglie di mezzo generando, non
+   ignorandolo giudicando. E il tritono è l'intervallo più difficile da intonare che esista.
+   Con la correzione ne è uscito un terzo difetto: chiudevano con salti da quattordici
+   semitoni (`La4 → Sol3`) e facevano l'andirivieni fra due note sole.
 
 E uno di comportamento: i primi 400 ms di una nota sono l'attacco, non la tenuta, e
 includerli faceva risultare instabile una nota tenuta benissimo. L'attacco ha un esercizio

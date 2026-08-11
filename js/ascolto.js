@@ -8,9 +8,10 @@
 // Non tutti i telefoni obbediscono: `stato()` dice cosa è stato davvero applicato, così
 // `prova-zero.html` può dirlo invece di lasciarlo credere.
 
-import { Rilevatore, centesimi } from './pitch.js';
+import { Rilevatore, centesimi, midiDaHz } from './pitch.js';
 
 const PASSO_MS = 25;
+const dbfs = (rms) => 20 * Math.log10(Math.max(rms, 1e-9));
 
 export class Ascolto {
   constructor() {
@@ -64,7 +65,7 @@ export class Ascolto {
    *   l'autocorrelazione del vibrato vuole un passo costante), `dentro` è la frazione di
    *   letture in cui una nota c'era davvero.
    */
-  raccogli(bersaglioHz, ms, suLettura = null) {
+  raccogli(bersaglioHz, ms, suLettura = null, { conTimbro = false } = {}) {
     return new Promise((risolvi) => {
       const grezze = [];
       const inizio = performance.now();
@@ -73,7 +74,10 @@ export class Ascolto {
         const l = this.rilevatore.leggi();
         const t = performance.now() - inizio;
         this.ultima = l;
-        grezze.push({ t, hz: l.hz, rms: l.rms, livello: l.livello, silenzio: l.silenzio });
+        grezze.push({
+          t, hz: l.hz, rms: l.rms, livello: l.livello, silenzio: l.silenzio,
+          brillantezza: conTimbro && l.hz ? this._brillantezza(l.hz) : null,
+        });
         if (suLettura) suLettura(l, t / ms);
         if (t >= ms) {
           clearInterval(this.giro);
@@ -123,6 +127,32 @@ export class Ascolto {
     });
   }
 
+  /**
+   * Il baricentro dello spettro diviso la fondamentale: quanto è «brillante» il suono.
+   *
+   * È il numero che vede il cambio di TIMBRO, che è la metà non ovvia del passaggio di
+   * registro (l'altra metà è il livello). Diviso per la fondamentale, e non in Hz assoluti,
+   * perché altrimenti misurerebbe soprattutto il fatto che stai salendo: un La4 ha il
+   * baricentro più in alto di un La3 anche a timbro identico.
+   */
+  _brillantezza(hz) {
+    if (!this._spettro) this._spettro = new Float32Array(this.analizzatore.frequencyBinCount);
+    this.analizzatore.getFloatFrequencyData(this._spettro);
+    const binHz = this.ctx.sampleRate / this.analizzatore.fftSize;
+    const primo = Math.max(1, Math.floor(60 / binHz));
+    const ultimo = Math.min(this._spettro.length - 1, Math.ceil(5000 / binHz));
+    let peso = 0;
+    let somma = 0;
+    for (let i = primo; i <= ultimo; i += 1) {
+      const db = this._spettro[i];
+      if (!Number.isFinite(db) || db < -90) continue;
+      const a = 10 ** (db / 20);
+      peso += a;
+      somma += a * i * binHz;
+    }
+    return peso > 0 ? (somma / peso) / hz : null;
+  }
+
   _impacchetta(grezze, bersaglioHz) {
     const conNota = grezze.filter((g) => g.hz);
     const riferimento = bersaglioHz || (conNota.length
@@ -141,6 +171,16 @@ export class Ascolto {
       dtMs: dt,
       riferimento,
       dentro: grezze.length ? conNota.length / grezze.length : 0,
+      // Le altezze in numero MIDI, per gli esercizi a più note (scale, melodie), e le
+      // letture complete per quello del passaggio di registro. La serie in centesimi non
+      // basta lì: serve sapere DOVE stavi, non solo quanto eri distante dal bersaglio.
+      // Con i BUCHI dentro, come `null`: fra una nota e l'altra di una scala il microfono
+      // non sente niente, e tapparli con l'ultimo valore buono unirebbe due note uguali in
+      // una sola. Qui il silenzio è un'informazione, non un guasto da nascondere.
+      serieMidi: grezze.map((g) => (g.hz ? midiDaHz(g.hz) : null)),
+      letture: conNota.map((g) => ({
+        tMs: g.t, midi: midiDaHz(g.hz), dbfs: dbfs(g.rms), brillantezza: g.brillantezza,
+      })),
     };
   }
 

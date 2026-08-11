@@ -29,6 +29,12 @@ a.carta {
 a.carta b { display: block; font-size: 1.06rem; margin-bottom: 3px; }
 a.carta span { color: var(--dim); font-size: .87rem; }
 a.carta.piccola { background: none; }
+a.carta.primo { border-color: var(--ambra); background: linear-gradient(180deg, rgba(224,164,88,.14), rgba(224,164,88,.04)); }
+a.carta.fatto b { color: var(--verde); }
+.domanda { margin-bottom: 4px; }
+.risposte { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.risposte button { margin: 0; }
+.risposte button:disabled { opacity: .35; }
 .contatore { position: absolute; top: 15px; right: 16px; font-style: normal; font-size: .76rem; color: var(--ambra); }
 
 .tuoi-numeri { border: 1px solid var(--linea); border-radius: 16px; padding: 14px 17px; margin: 0 0 18px;

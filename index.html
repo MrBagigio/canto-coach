@@ -6,12 +6,63 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14100d">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Canto">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="app.webmanifest">
+<!-- iOS ignora le icone del manifest per la schermata Home: senza questo PNG l'app
+     aggiunta alla Home resta un riquadro vuoto o uno screenshot della pagina. -->
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="stylesheet" href="css/canto.css">
 </head>
 <body>
 <div id="app"></div>
 <noscript><p style="padding:20px;color:#f2ece5">Questa pagina misura la tua voce dal microfono: senza JavaScript non può fare niente.</p></noscript>
 <script type="module" src="js/app.js"></script>
+<script>
+// Rete di sicurezza contro la cache, e non è pessimismo: negli altri progetti di questa
+// famiglia il service worker ha servito mezza app vecchia e mezza nuova, e il risultato
+// era una pagina BIANCA senza nessun errore visibile. Questo script sta qui dentro apposta:
+// index.html è l'unico file sempre fresco, perché le navigazioni vanno in rete.
+//
+// Se dopo un secondo la pagina è ancora vuota, o un modulo non combacia, si svuota tutto e
+// si ricarica UNA volta sola — il segnaposto in sessionStorage impedisce il ciclo infinito
+// di ricariche, che sarebbe peggio del problema.
+(function () {
+  var CHIAVE = 'canto-ripulita';
+  function ripulisci(motivo) {
+    if (sessionStorage.getItem(CHIAVE)) return;      // una volta sola, mai un ciclo
+    sessionStorage.setItem(CHIAVE, motivo);
+    Promise.all([
+      caches.keys ? caches.keys().then(function (n) { return Promise.all(n.map(function (x) { return caches.delete(x); })); }) : 0,
+      navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }) : 0,
+    ]).catch(function () {}).then(function () { location.reload(); });
+  }
+  window.addEventListener('error', function (e) {
+    if (e && e.message && /module|import|export/i.test(String(e.message))) ripulisci('modulo');
+  }, true);
+  setTimeout(function () {
+    var a = document.getElementById('app');
+    if (!a || a.children.length === 0) ripulisci('pagina vuota');
+  }, 1500);
+
+  if ('serviceWorker' in navigator) {
+    // In locale il service worker NON si registra e anzi si disinstalla: durante lo
+    // sviluppo servirebbe il file di ieri e un fix sembrerebbe inerte. È già successo.
+    var locale = ['localhost', '127.0.0.1'].indexOf(location.hostname) >= 0;
+    if (locale) {
+      navigator.serviceWorker.getRegistrations().then(function (r) { r.forEach(function (x) { x.unregister(); }); });
+    } else {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+      var ricaricata = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (ricaricata) return;                       // una ricarica sola, non un ciclo
+        ricaricata = true;
+        location.reload();
+      });
+    }
+  }
+})();
+</script>
 </body>
 </html>

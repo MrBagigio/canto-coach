@@ -300,6 +300,163 @@ export function giudicaFiato({ serie, dtMs }, { tolleranza = TOLLERANZA + 15 } =
     secondi);
 }
 
+/**
+ * Scale e agilità: quante note hai preso, e quanto ci hai messo.
+ *
+ * Il criterio è a due facce e servono tutte e due: prendere le note e stare nel tempo.
+ * Prenderle tutte a metà velocità non è agilità; farle a velocità doppia saltandone due
+ * nemmeno. Per questo il verdetto promuove solo se entrambe reggono, e dice quale delle
+ * due ha ceduto — che è l'unica informazione su cui si può fare qualcosa.
+ */
+export function giudicaAgilita(confronto, { msAttesi }) {
+  const { prese, su, durataMs, scartoMedio } = confronto;
+  const righe = [
+    `${prese} note su ${su}`,
+    `${(durataMs / 1000).toFixed(1)} s contro ${(msAttesi / 1000).toFixed(1)} chiesti`,
+  ];
+  if (scartoMedio !== null) righe.push(`intonazione media delle note prese ${segno(scartoMedio)} centesimi`);
+  if (prese < su) {
+    const mancate = confronto.esiti.filter((e) => !e.cantata).length;
+    return verdetto(`Ne hai prese ${prese} su ${su}`, righe, false,
+      `${mancate === 1 ? 'Una nota' : `${mancate} note`} non ${mancate === 1 ? 'è uscita' : 'sono uscite'} o ${mancate === 1 ? 'era' : 'erano'} troppo lontana dalla scala. Rifalla più lenta: l'agilità si costruisce da ferma, non da veloce.`);
+  }
+  const troppoLento = durataMs > msAttesi * 1.35;
+  if (troppoLento) {
+    return verdetto('Tutte prese, ma più lenta del richiesto', righe, false,
+      'Le note ci sono tutte: adesso è solo questione di tenerle nel tempo.');
+  }
+  return verdetto('Scala pulita, a tempo', righe, true,
+    'Prese tutte e dentro il tempo: la prossima volta si può stringere.');
+}
+
+/** Una melodia cantata a memoria: stesse regole della scala, parole diverse. */
+export function giudicaMelodia(confronto) {
+  const { prese, su, scartoMedio } = confronto;
+  const righe = [`${prese} note su ${su}`];
+  if (scartoMedio !== null) righe.push(`intonazione media ${segno(scartoMedio)} centesimi`);
+  const buchi = confronto.esiti.map((e, i) => (e.cantata ? null : i + 1)).filter(Boolean);
+  if (prese === su) {
+    return verdetto('Melodia presa tutta', righe, true,
+      Math.abs(scartoMedio || 0) > TOLLERANZA
+        ? `Le note giuste, ma tutta la melodia sta ${scartoMedio < 0 ? 'sotto' : 'sopra'} di ${Math.abs(scartoMedio).toFixed(0)} centesimi: l'hai trasportata. È un difetto diverso e più piccolo di stonare.`
+        : 'Note e intonazione a posto.');
+  }
+  return verdetto(`Ne hai prese ${prese} su ${su}`, righe, false,
+    `${buchi.length === 1 ? `La nota numero ${buchi[0]} non c'è` : `Mancano le note ${buchi.join(', ')}`}. Riascoltala: la melodia si canta quando la si sente in testa, non mentre la si indovina.`);
+}
+
+// ── Il passaggio di registro ─────────────────────────────────────────────────
+
+/**
+ * Dove la voce cambia registro, cercato in un glissando lento in salita.
+ *
+ * Due cose si vedono al microfono quando si passa da un registro all'altro: il LIVELLO fa
+ * un gradino (di solito verso il basso, perché il registro alto è più sottile finché non
+ * è allenato) e il TIMBRO cambia — lo spettro si impoverisce di armoniche, cioè il
+ * baricentro spettrale rispetto alla fondamentale scende. Nessuna delle due, da sola, è
+ * una prova; insieme, e se il gradino è NETTO rispetto a come quelle due grandezze
+ * ballano normalmente, sono un indizio serio.
+ *
+ * La soglia non è un numero scelto: il salto deve staccarsi dal passo TIPICO fra due
+ * semitoni vicini nello stesso glissando, misurato lì per lì. Chi non ha un passaggio
+ * evidente — o chi ha mosso il telefono mentre saliva — riceve «non l'ho trovato», che è
+ * la risposta giusta molto più spesso di quanto sia comodo ammettere.
+ */
+export const STACCO_MINIMO = 2.5;
+
+/**
+ * Quanto deve essere grande il gradino IN ASSOLUTO, oltre che rispetto agli altri.
+ *
+ * Il punteggio da solo è un rapporto contro il passo tipico del glissando, e un rapporto
+ * ha un buco nero al denominatore: su una salita liscissima il passo tipico tende a zero e
+ * qualunque bricciolo diventa «dieci volte il tipico». Non è teoria — guidando l'app è
+ * uscito un passaggio dichiarato con un gradino di **−0,0 dB**, cioè il nulla presentato
+ * come una scoperta. È [[il difetto numero uno]] di questa famiglia in una veste nuova:
+ * dichiarare qualcosa che non si sta misurando.
+ *
+ * Questi due numeri sono il pavimento sotto cui non si guarda più il rapporto. Vengono da
+ * cosa può fare la stanza invece della voce: due decibel se ti muovi appena rispetto al
+ * telefono, e un decimo di baricentro se cambia il rumore di fondo. Sotto, non è un
+ * passaggio: è un microfono.
+ */
+export const DB_MINIMO = 2.0;
+export const TIMBRO_MINIMO = 0.12;
+
+export function trovaPassaggio(letture, { minSemitoni = 7, perCasella = 3 } = {}) {
+  const caselle = new Map();
+  for (const l of letture) {
+    if (!Number.isFinite(l.midi)) continue;
+    const k = Math.round(l.midi);
+    if (!caselle.has(k)) caselle.set(k, { midi: k, db: [], br: [] });
+    caselle.get(k).db.push(l.dbfs);
+    if (Number.isFinite(l.brillantezza)) caselle.get(k).br.push(l.brillantezza);
+  }
+  const mediana = (a) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : null);
+  const punti = [...caselle.values()]
+    .filter((c) => c.db.length >= perCasella)
+    .sort((a, b) => a.midi - b.midi)
+    .map((c) => ({ midi: c.midi, db: mediana(c.db), br: mediana(c.br) }));
+
+  if (punti.length < minSemitoni) {
+    return { trovato: false, motivo: `il glissando ha coperto ${punti.length} semitoni, ne servono almeno ${minSemitoni}`, punti };
+  }
+  const passi = [];
+  for (let i = 1; i < punti.length; i += 1) {
+    if (punti[i].midi - punti[i - 1].midi > 2) continue;   // buco: non è un passo
+    passi.push({
+      midi: punti[i].midi,
+      dDb: punti[i].db - punti[i - 1].db,
+      dBr: (punti[i].br !== null && punti[i - 1].br !== null) ? punti[i].br - punti[i - 1].br : 0,
+    });
+  }
+  if (passi.length < minSemitoni - 1) {
+    return { trovato: false, motivo: 'il glissando è troppo spezzettato per confrontare i passi', punti };
+  }
+  // Il pavimento sui «tipici» non è prudenza: senza, il rapporto ha un buco nero al
+  // denominatore e su una salita liscia dichiara un passaggio dove non c'è niente.
+  const tipico = (chiave, pavimento) => {
+    const v = passi.map((p) => Math.abs(p[chiave])).sort((a, b) => a - b);
+    return Math.max(v[Math.floor(v.length / 2)], pavimento);
+  };
+  const tDb = tipico('dDb', DB_MINIMO / 4);
+  const tBr = tipico('dBr', TIMBRO_MINIMO / 4);
+  const punteggiati = passi.map((p) => ({ ...p, punteggio: Math.abs(p.dDb) / tDb + Math.abs(p.dBr) / tBr }));
+  const migliore = punteggiati.reduce((a, b) => (b.punteggio > a.punteggio ? b : a));
+  const abbastanzaGrande = Math.abs(migliore.dDb) >= DB_MINIMO || Math.abs(migliore.dBr) >= TIMBRO_MINIMO;
+  if (migliore.punteggio < STACCO_MINIMO * 2 || !abbastanzaGrande) {
+    return {
+      trovato: false,
+      motivo: abbastanzaGrande
+        ? 'nessun gradino si stacca dal resto: o non hai un passaggio evidente, o non si vede da questo microfono'
+        : `il gradino più grosso è di ${Math.abs(migliore.dDb).toFixed(1)} dB e ${Math.abs(migliore.dBr).toFixed(2)} di timbro: troppo piccolo per non essere il microfono`,
+      punti,
+      tipico: { db: tDb, br: tBr },
+    };
+  }
+  return {
+    trovato: true,
+    midi: migliore.midi,
+    dDb: migliore.dDb,
+    dBr: migliore.dBr,
+    punteggio: migliore.punteggio,
+    punti,
+    tipico: { db: tDb, br: tBr },
+  };
+}
+
+export function giudicaPassaggio(esito) {
+  if (!esito.trovato) {
+    return verdetto('Non ho trovato un passaggio netto', [esito.motivo], true,
+      'Non vuol dire che non ce l\'hai: vuol dire che da qui non si vede. Un passaggio si sente meglio di quanto si misuri, e molte voci non ne hanno uno solo. Riprova salendo più lentamente, senza spostare il telefono.');
+  }
+  return verdetto(`Attorno al ${nome(esito.midi)}`, [
+    `il livello fa un gradino di ${esito.dDb >= 0 ? '+' : '−'}${Math.abs(esito.dDb).toFixed(1)} dB`,
+    `il timbro cambia di ${esito.dBr >= 0 ? '+' : '−'}${Math.abs(esito.dBr).toFixed(2)} (baricentro rispetto alla fondamentale)`,
+    `il gradino è ${(esito.punteggio / 2).toFixed(1)} volte il passo tipico di questo glissando`,
+  ], true,
+    `Sapere dove sta il tuo passaggio cambia cosa ha senso studiare: le note lì attorno vanno lavorate piano e senza spingere, ed è normale che siano le più scomode. Rifallo un altro giorno — se esce sempre lì, è lì.`);
+}
+
 // ── L'estensione ─────────────────────────────────────────────────────────────
 
 /**

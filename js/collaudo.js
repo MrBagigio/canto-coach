@@ -18,6 +18,9 @@ import {
 import { scomponi, retta, calo, PASSO_MASSIMO_MS } from './vibrato.js';
 import * as audio from './audio.js';
 import * as esercizi from './esercizi.js';
+import * as melodie from './melodie.js';
+import * as ripasso from './ripasso.js';
+import * as percorso from './percorso.js';
 import { nome as nomeIt, MIDI_MIN, MIDI_MAX } from './teoria.js';
 
 const gruppi = [];
@@ -1110,6 +1113,266 @@ gruppo('Estensione — la macchina a stati', (t) => {
   t.ok('arrivati al fondo della banda si cambia verso e si spiega perché',
     b.verso === 'su' && /non ti so misurare/.test(b.motivoFine), b.motivoFine || '(nessun motivo dato)');
   t.ok('e non si dice mai che non ci arrivi', !/non ci arrivi\b/.test(b.motivoFine.replace('non è che non ci arrivi', '')), b.motivoFine);
+});
+
+// ── Melodie e scale — generate, e ritagliate dal microfono ───────────────────
+
+gruppo('Melodie — generate, mai copiate', (t) => {
+  // Il motivo per cui questo file esiste: una sequenza di accordi non è protetta (e infatti
+  // le altre tre app hanno una libreria di giri), ma una MELODIA sì — è proprio quello che
+  // il diritto d'autore protegge in una canzone. Generarla è l'unica delle tre vie pulite
+  // che non richiede né un catalogo né il lavoro dell'utente.
+  const tonica = 55; // Sol3
+  for (const seme of [1, 7, 42, 1234, 99999]) {
+    const m = melodie.melodiaGenerata(tonica, { passi: 6, seme, ambito: 8 });
+    t.ok(`seme ${seme}: parte e finisce sulla tonica`, m[0] === tonica && m[m.length - 1] === tonica,
+      m.map(nomeIt).join(' '));
+    t.ok(`seme ${seme}: non esce dall'ambito chiesto`, m.every((x) => x >= tonica && x <= tonica + 14),
+      m.map(nomeIt).join(' '));
+    const salti = m.slice(1).map((x, i) => Math.abs(x - m[i]));
+    t.ok(`seme ${seme}: nessun salto più largo di una quinta`, Math.max(...salti) <= melodie.SALTO_MASSIMO_SEMITONI,
+      `salto massimo ${Math.max(...salti)} semitoni in ${m.map(nomeIt).join(' ')}`);
+    // ⚠️ Due difetti visti guidando l'app, non leggendo: una melodia con due note UGUALI
+    // attaccate (che il microfono non può distinguere da una nota lunga: l'esercizio ne
+    // conterebbe una come mancata, bocciando chi ha fatto giusto) e un salto di tritono
+    // Si3→Fa4, l'intervallo più difficile da intonare che esista.
+    t.ok(`seme ${seme}: mai due note uguali di fila`, salti.every((s) => s > 0),
+      m.map(nomeIt).join(' '));
+    t.ok(`seme ${seme}: mai un tritono`, salti.every((s) => s !== 6), m.map(nomeIt).join(' '));
+  }
+  t.misura('cinque melodie generate', [1, 7, 42, 1234, 99999]
+    .map((s) => melodie.melodiaGenerata(55, { passi: 6, seme: s, ambito: 8 }).map(nomeIt).join(' '))
+    .join(' | '));
+  // ⚠️ «Sol La Sol La Sol»: formalmente a posto e completamente inutile. Una melodia che
+  // fa avanti e indietro fra due note non insegna niente e non si riconosce.
+  const andirivieni = (m) => m.slice(2).filter((x, i) => x === m[i]).length;
+  for (const seme of [1, 7, 42, 1234, 99999, 5, 61]) {
+    const m = melodie.melodiaGenerata(55, { passi: 6, seme, ambito: 8 });
+    t.ok(`seme ${seme}: non fa l'andirivieni fra due note sole`,
+      andirivieni(m) <= 1 && new Set(m).size >= 3, m.map(nomeIt).join(' '));
+  }
+  const diverse = new Set([1, 7, 42, 1234, 99999, 5, 61]
+    .map((s) => melodie.melodiaGenerata(55, { seme: s }).join(',')));
+  t.ok('semi diversi danno melodie per lo più diverse', diverse.size >= 5,
+    `${diverse.size} melodie distinte su 7 semi`);
+  t.uguale('lo stesso seme dà la stessa melodia',
+    melodie.melodiaGenerata(tonica, { seme: 7 }), melodie.melodiaGenerata(tonica, { seme: 7 }));
+  t.ok('semi diversi danno melodie diverse',
+    JSON.stringify(melodie.melodiaGenerata(tonica, { seme: 7 })) !== JSON.stringify(melodie.melodiaGenerata(tonica, { seme: 8 })));
+
+  const scala = melodie.scalaAgilita(60);
+  t.uguale('la scala di agilità sale e ridiscende sulla stessa nota',
+    scala, [60, 62, 64, 65, 67, 65, 64, 62, 60]);
+  t.uguale('l\'arpeggio è tonica terza quinta ottava e ritorno',
+    melodie.arpeggio(60), [60, 64, 67, 72, 67, 64, 60]);
+  t.uguale('i gradi funzionano anche sotto la tonica', melodie.gradoDi(60, -1), 59);
+});
+
+gruppo('Melodie — ritagliare le note da una linea continua', (t) => {
+  const dt = 25;
+  // Una scala cantata: note tenute, con un portamento in mezzo e un respiro (silenzio).
+  const linea = [];
+  const attese = [60, 62, 64, 62, 60];
+  attese.forEach((m, i) => {
+    if (i === 2) for (let k = 0; k < 4; k += 1) linea.push(null);        // un respiro
+    if (i > 0) for (let k = 0; k < 3; k += 1) linea.push(attese[i - 1] + ((m - attese[i - 1]) * (k + 1)) / 4); // portamento
+    for (let k = 0; k < 16; k += 1) linea.push(m + 0.05 * Math.sin(k));  // 400 ms di nota
+  });
+  const note = melodie.segmentaNote(linea, dt);
+  t.uguale('ritaglia esattamente le note cantate', note.map((n) => Math.round(n.midi)), attese);
+  t.misura('durate ritagliate', note.map((n) => `${n.durataMs.toFixed(0)} ms`).join(' · '));
+
+  // ⚠️ Il caso che rende necessario tenere i buchi: due note UGUALI separate da un respiro.
+  // Tappando il silenzio con l'ultimo valore buono diventerebbero una nota sola, e in una
+  // scala che sale e ridiscende succede a ogni giro.
+  const conRespiro = [...Array(16).fill(60), ...Array(6).fill(null), ...Array(16).fill(60)];
+  t.uguale('due note uguali separate da un respiro restano due',
+    melodie.segmentaNote(conRespiro, dt).length, 2);
+  const senzaBuchi = [...Array(16).fill(60), ...Array(6).fill(60), ...Array(16).fill(60)];
+  t.uguale('mentre senza il respiro è giustamente una sola',
+    melodie.segmentaNote(senzaBuchi, dt).length, 1);
+
+  // Il confronto salta avanti: una nota mancata non deve far risultare sbagliate tutte le
+  // successive, che è quello che succede allineando a coppie fisse.
+  const cantate = [60, 64, 62, 60].map((m, i) => ({ midi: m, daMs: i * 500, durataMs: 400 }));
+  const c = melodie.confrontaSequenza(cantate, [60, 62, 64, 62, 60]);
+  t.ok('una nota saltata non trascina con sé le successive', c.prese >= 3,
+    `${c.prese} su ${c.su}: ${c.esiti.map((e) => (e.cantata ? '·' : '✕')).join('')}`);
+  const tutte = melodie.confrontaSequenza(
+    [60, 62, 64, 62, 60].map((m, i) => ({ midi: m + 0.2, daMs: i * 500, durataMs: 400 })), [60, 62, 64, 62, 60],
+  );
+  t.uguale('una melodia cantata giusta le prende tutte', tutte.prese, 5);
+  t.ok('e ne misura lo scarto medio', Math.abs(tutte.scartoMedio - 20) < 1, `${tutte.scartoMedio.toFixed(0)} centesimi`);
+
+  const trasportata = melodie.confrontaSequenza(
+    [60, 62, 64, 62, 60].map((m, i) => ({ midi: m + 3, daMs: i * 500, durataMs: 400 })), [60, 62, 64, 62, 60],
+  );
+  t.uguale('una melodia trasportata di tre semitoni NON conta come presa', trasportata.prese, 0);
+});
+
+// ── Passaggio di registro ────────────────────────────────────────────────────
+
+gruppo('Passaggio di registro — trovarlo, o dire che non si vede', (t) => {
+  // Un glissando finto: livello e brillantezza che scendono piano, e un GRADINO netto a
+  // un certo punto. È quello che fa una voce quando cambia registro.
+  const glissando = ({ salto = null, rumore = 0.15, semi = 14, seme = 3, dbSalto = -6, brSalto = -0.6 } = {}) => {
+    const r = melodie.caso(seme);
+    const fuori = [];
+    for (let i = 0; i < semi; i += 1) {
+      const dopo = salto !== null && i >= salto;
+      for (let k = 0; k < 6; k += 1) {
+        fuori.push({
+          midi: 52 + i + (r() - 0.5) * 0.4,
+          dbfs: -20 - i * 0.15 + (dopo ? dbSalto : 0) + (r() - 0.5) * rumore,
+          brillantezza: 3.2 - i * 0.02 + (dopo ? brSalto : 0) + (r() - 0.5) * rumore * 0.1,
+        });
+      }
+    }
+    return fuori;
+  };
+
+  const con = esercizi.trovaPassaggio(glissando({ salto: 8 }));
+  t.ok('trova il gradino dov\'è', con.trovato && con.midi === 60, JSON.stringify({ trovato: con.trovato, midi: con.midi }));
+  t.misura('gradino trovato', con.trovato ? `${nomeIt(con.midi)}: ${con.dDb.toFixed(1)} dB, timbro ${con.dBr.toFixed(2)}, ${(con.punteggio / 2).toFixed(1)}× il passo tipico` : con.motivo);
+
+  // E — la parte che conta di più — su una voce SENZA un gradino netto non deve inventarne
+  // uno. Un'app che indica sempre un punto ha ragione per caso una volta su dodici.
+  const senza = esercizi.trovaPassaggio(glissando({ salto: null }));
+  t.ok('su un glissando liscio NON inventa un passaggio', !senza.trovato, JSON.stringify(senza.midi));
+  t.misura('glissando liscio', senza.motivo);
+
+  // ⚠️ Il difetto trovato guidando l'app: su una salita PERFETTAMENTE liscia il passo
+  // tipico tende a zero, il punteggio è un rapporto, e qualunque bricciolo diventa «dieci
+  // volte il tipico». L'app ha dichiarato un passaggio con un gradino di −0,0 dB — il
+  // nulla presentato come una scoperta.
+  const lisciaDavvero = esercizi.trovaPassaggio(glissando({ salto: null, rumore: 0 }));
+  t.ok('e nemmeno su una salita perfettamente liscia, dove il passo tipico è zero',
+    !lisciaDavvero.trovato,
+    `ha dichiarato ${lisciaDavvero.midi ? nomeIt(lisciaDavvero.midi) : ''} con ${lisciaDavvero.dDb?.toFixed(1)} dB`);
+  t.misura('salita perfettamente liscia', lisciaDavvero.motivo);
+  t.misura('pavimenti sotto cui non è un passaggio ma un microfono',
+    `${esercizi.DB_MINIMO} dB di livello · ${esercizi.TIMBRO_MINIMO} di timbro`);
+
+  // E un gradino piccolo ma NETTO resta comunque non dichiarabile: la nettezza da sola non
+  // basta se la cosa è più piccola di quanto la stanza sappia fare da sé.
+  const gradinetto = esercizi.trovaPassaggio(glissando({ salto: 8, rumore: 0.02, dbSalto: -0.5, brSalto: -0.02 }));
+  t.ok('un gradino piccolissimo non viene dichiarato, per quanto netto sia',
+    !gradinetto.trovato, `${gradinetto.dDb?.toFixed(2)} dB`);
+
+  const corto = esercizi.trovaPassaggio(glissando({ salto: 4, semi: 5 }));
+  t.ok('un glissando troppo corto viene dichiarato tale', !corto.trovato && /semitoni/.test(corto.motivo), corto.motivo);
+
+  const v = esercizi.giudicaPassaggio(senza);
+  t.ok('e «non trovato» non è un fallimento dell\'utente', v.promosso && /non vuol dire che non ce l'hai/i.test(v.dettaglio), v.dettaglio.slice(0, 60));
+});
+
+// ── Agilità e melodia: i verdetti ────────────────────────────────────────────
+
+gruppo('Agilità e melodia — i due criteri devono valere insieme', (t) => {
+  const seq = [60, 62, 64, 65, 67, 65, 64, 62, 60];
+  const cantate = (scarto, passoMs) => seq.map((m, i) => ({ midi: m + scarto, daMs: i * passoMs, durataMs: passoMs * 0.8 }));
+  const attesi = seq.length * 500;
+
+  const bene = esercizi.giudicaAgilita(melodie.confrontaSequenza(cantate(0.1, 500), seq), { msAttesi: attesi });
+  t.ok('tutte prese e a tempo: promossa', bene.promosso, `${bene.titolo} — ${bene.righe.join(' · ')}`);
+
+  const lenta = esercizi.giudicaAgilita(melodie.confrontaSequenza(cantate(0.1, 900), seq), { msAttesi: attesi });
+  t.ok('tutte prese ma lenta: NON promossa', !lenta.promosso, lenta.titolo);
+  t.ok('e lo dice che il problema è il tempo, non le note', /lenta/i.test(lenta.titolo), lenta.titolo);
+
+  const bucata = esercizi.giudicaAgilita(
+    melodie.confrontaSequenza(cantate(0.1, 500).filter((_, i) => i !== 3), seq), { msAttesi: attesi },
+  );
+  t.ok('una nota mancata: NON promossa', !bucata.promosso, bucata.titolo);
+  t.ok('e il consiglio è rallentare, non accelerare', /più lenta/i.test(bucata.dettaglio), bucata.dettaglio.slice(0, 80));
+
+  // Una melodia cantata giusta ma tutta traslata è un difetto DIVERSO dallo stonare, e
+  // merita di essere chiamato con il suo nome.
+  const mel = [60, 62, 64, 62, 60];
+  const traslata = melodie.confrontaSequenza(
+    mel.map((m, i) => ({ midi: m + 0.55, daMs: i * 500, durataMs: 400 })), mel,
+  );
+  const vm = esercizi.giudicaMelodia(traslata);
+  t.ok('una melodia giusta ma trasportata viene presa tutta', vm.promosso, vm.titolo);
+  t.ok('e le si dice che l\'ha trasportata', /trasportata/i.test(vm.dettaglio), vm.dettaglio);
+});
+
+// ── Ripetizione spaziata ─────────────────────────────────────────────────────
+
+gruppo('Ripasso — sbagliare riporta indietro, azzeccare dirada', (t) => {
+  const ORA = 1000000;
+  const GIORNO = 24 * 3600 * 1000;
+  let s = ripasso.schedaNuova('int-7');
+  t.uguale('una scheda nuova è dovuta subito', s.quando, 0);
+  s = ripasso.rispondi(s, true, ORA);
+  t.uguale('azzeccata una volta: domani', s.quando - ORA, 1 * GIORNO);
+  s = ripasso.rispondi(s, true, ORA);
+  t.uguale('due volte: fra tre giorni', s.quando - ORA, 3 * GIORNO);
+  s = ripasso.rispondi(s, true, ORA);
+  t.uguale('tre volte: fra una settimana', s.quando - ORA, 7 * GIORNO);
+  s = ripasso.rispondi(s, false, ORA);
+  t.uguale('sbagliata: si torna al primo gradino, cioè adesso', s.quando - ORA, 0);
+  t.uguale('ma le viste restano contate', s.viste, 4);
+
+  const schede = [
+    { id: 'a', gradino: 3, quando: ORA - 5000, viste: 3, giuste: 3 },
+    { id: 'b', gradino: 0, quando: ORA - 90000, viste: 1, giuste: 0 },
+    { id: 'c', gradino: 2, quando: ORA + GIORNO, viste: 2, giuste: 2 },
+    { id: 'd', gradino: 0, quando: 0, viste: 0, giuste: 0 },
+  ];
+  // ⚠️ Il difetto trovato qui: una scheda MAI vista ha `quando: 0`, quindi risultava la
+  // più in ritardo di tutte e passava davanti a ogni ripasso vero. Il file dichiarava
+  // «prima le scadute, poi le nuove» e il codice faceva l'opposto. Un ripasso scaduto ha
+  // una fretta che una scheda nuova non ha: sta per essere dimenticato.
+  t.uguale('si rivede prima quella più in ritardo, non quella mai vista',
+    ripasso.prossima(schede, ORA).id, 'b');
+  t.uguale('una scheda mai vista non conta come «da rivedere»',
+    ripasso.daRivedere(schede, ORA).map((x) => x.id), ['b', 'a']);
+  t.uguale('e quando non ce n\'è nessuna scaduta si insegna qualcosa di NUOVO',
+    ripasso.prossima(schede.filter((x) => x.quando > ORA || x.viste === 0), ORA).id, 'd');
+  // «Meno consolidato» = gradino più basso: b è al primo gradino, c al secondo, a al terzo.
+  t.uguale('finiti anche i nuovi, si torna sul meno consolidato',
+    ripasso.prossima(schede.filter((x) => x.viste > 0).map((x) => ({ ...x, quando: ORA + GIORNO })), ORA).id, 'b');
+  t.ok('il consolidamento sta fra 0 e 1',
+    ripasso.consolidamento(schede) > 0 && ripasso.consolidamento(schede) < 1,
+    ripasso.consolidamento(schede).toFixed(2));
+  t.uguale('senza schede non si inventa un numero', ripasso.consolidamento([]), 0);
+});
+
+// ── Il percorso ──────────────────────────────────────────────────────────────
+
+gruppo('Percorso — i criteri d\'uscita sono misurati, non spuntati', (t) => {
+  const vuoto = { sessioni: [], estensione: null, schede: [] };
+  const o = percorso.oggi(vuoto);
+  t.uguale('da zero, il primo gradino è la nota tenuta', o.prossimo.id, 'nota');
+  t.uguale('e non è fatto niente', o.fatti, 0);
+
+  // Il criterio è «di fila», non «almeno una volta»: venti tentativi di cui uno riuscito
+  // non sono un gradino superato, e la differenza la può vedere solo l'app.
+  const unaSola = { ...vuoto, sessioni: [{ esercizio: 'nota-tenuta', promosso: true }, { esercizio: 'nota-tenuta', promosso: false }] };
+  t.uguale('una buona e una no: il gradino non è fatto', percorso.oggi(unaSola).prossimo.id, 'nota');
+  const dueDiFila = { ...vuoto, sessioni: [{ esercizio: 'nota-tenuta', promosso: true }, { esercizio: 'nota-tenuta', promosso: true }, { esercizio: 'nota-tenuta', promosso: false }] };
+  t.uguale('due buone di fila (le più recenti): fatto', percorso.oggi(dueDiFila).prossimo.id, 'estensione');
+
+  const conEstensione = { ...dueDiFila, estensione: { grave: 48, acuto: 64, quando: 1 } };
+  t.uguale('con l\'estensione misurata si passa al passaggio', percorso.oggi(conEstensione).prossimo.id, 'passaggio');
+  const conPassaggio = { ...conEstensione, sessioni: [{ esercizio: 'passaggio', trovato: false }, ...conEstensione.sessioni] };
+  t.uguale('e «non trovato» chiude comunque il gradino: è una risposta',
+    percorso.oggi(conPassaggio).prossimo.id, 'attacco');
+
+  const tuttiIGradini = percorso.GRADINI;
+  t.ok('ogni gradino ha una rotta, un obiettivo e un criterio',
+    tuttiIGradini.every((g) => g.rotta && g.obiettivo && typeof g.criterio === 'function'),
+    tuttiIGradini.filter((g) => !g.rotta || !g.obiettivo).map((g) => g.id).join(', '));
+  t.misura('i gradini del percorso', `${tuttiIGradini.length}: ${tuttiIGradini.map((g) => g.titolo).join(' · ')}`);
+
+  // Il fiato chiede 12 secondi: sotto non basta, e il numero non è una pagella ma un
+  // bersaglio che si sposta.
+  const fiatoCorto = { ...vuoto, sessioni: [{ esercizio: 'fiato', secondi: 9 }] };
+  const fiatoLungo = { ...vuoto, sessioni: [{ esercizio: 'fiato', secondi: 13 }] };
+  t.ok('nove secondi di fiato non chiudono il gradino',
+    !percorso.stato(fiatoCorto).find((g) => g.id === 'fiato').fatto);
+  t.ok('tredici sì', percorso.stato(fiatoLungo).find((g) => g.id === 'fiato').fatto);
 });
 
 // ── esecuzione ───────────────────────────────────────────────────────────────

@@ -13,8 +13,12 @@ import { nome, hz, midiVicino, INTERVALLI, MIDI_MIN, MIDI_MAX } from './teoria.j
 import {
   TOLLERANZA, zonaComoda, zonaDaUnaNota, notaDaDare, notaPresa,
   giudicaNotaTenuta, giudicaAttacco, giudicaIntervallo, giudicaFiato,
+  giudicaAgilita, giudicaMelodia, trovaPassaggio, giudicaPassaggio,
   estensioneInizio, estensionePasso, estensioneRiassunto,
 } from './esercizi.js';
+import { scalaAgilita, melodiaGenerata, segmentaNote, confrontaSequenza } from './melodie.js';
+import { rispondi, prossima, daRivedere, consolidamento } from './ripasso.js';
+import { oggi } from './percorso.js';
 
 const app = document.getElementById('app');
 let ascolto = null;
@@ -482,15 +486,238 @@ async function vistaFiato() {
   });
 }
 
-// ── casa ─────────────────────────────────────────────────────────────────────
+// ── schermata: passaggio di registro ─────────────────────────────────────────
 
-const ESERCIZI = [
-  { id: 'nota', titolo: 'Nota tenuta', sotto: 'La prima lezione di qualunque insegnante: una nota, tenuta ferma.', rotta: '#/nota' },
-  { id: 'estensione', titolo: 'La tua estensione', sotto: 'Due numeri che l\'app userà per tutto il resto: senza, ti darebbe le note di un altro.', rotta: '#/estensione' },
-  { id: 'attacco', titolo: 'Attacco pulito', sotto: 'Atterrare sulla nota invece di scivolarci sopra da sotto.', rotta: '#/attacco' },
-  { id: 'intervalli', titolo: 'Intervalli', sotto: 'Terza, quarta, quinta, ottava: il cuore delle lezioni.', rotta: '#/intervalli' },
-  { id: 'fiato', titolo: 'Fiato', sotto: 'Quanti secondi tieni la nota dentro tolleranza. Un numero che sale.', rotta: '#/fiato' },
-];
+async function vistaPassaggio() {
+  const corpo = schermata('Il tuo passaggio',
+    'Un glissando LENTO in salita, su «u» o a bocca chiusa, dalla nota più comoda verso l\'alto. Non spingere e non cercare l\'acuto: l\'esercizio è salire piano e uniformi. E non spostare il telefono mentre sali, altrimenti quello che cambia è la distanza, non la tua voce.');
+  if (!await preparaMicrofono(corpo)) return;
+  const ui = palco(corpo, 'Comincia il glissando');
+  const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 52, alto: 64 };
+
+  ui.pulsante.addEventListener('click', async () => {
+    ui.pulsante.disabled = true;
+    const partenza = Math.round(zona.basso);
+    ui.stato.textContent = 'ascolta la nota di partenza…';
+    ui.stato.className = 'stato ascolta';
+    await audio.daiLaNota(hz(partenza), { durataMs: 1400 });
+    await pausa(DOPO_LA_NOTA_MS);
+    ascolto.dimenticaLaStanza();
+
+    ui.stato.textContent = `parti dal ${nome(partenza)} e sali piano, senza fermarti`;
+    ui.stato.className = 'stato canta';
+    const racc = await ascolto.raccogli(hz(partenza), 10000, (l, a) => {
+      ui.quadrante.aggiorna(l, l.hz);
+      ui.progresso.style.width = `${Math.min(100, a * 100).toFixed(0)}%`;
+    }, { conTimbro: true });
+    ui.progresso.style.width = '0';
+    ui.stato.textContent = '';
+    ui.stato.className = 'stato';
+    ui.quadrante.spegni();
+
+    const esito = trovaPassaggio(racc.letture);
+    const v = giudicaPassaggio(esito);
+    ui.esiti.prepend(cartaVerdetto(v));
+    if (esito.punti && esito.punti.length) {
+      ui.esiti.prepend(nota(`Hai coperto ${esito.punti.length} semitoni, da ${nome(esito.punti[0].midi)} a ${nome(esito.punti[esito.punti.length - 1].midi)}.`));
+    }
+    store.salvaSessione({ esercizio: 'passaggio', midi: esito.midi || null, trovato: !!esito.trovato, promosso: true });
+    ui.pulsante.disabled = false;
+    ui.pulsante.textContent = 'Rifallo';
+  });
+}
+
+// ── schermata: scale e agilità ───────────────────────────────────────────────
+
+async function vistaAgilita() {
+  const corpo = schermata('Scale e agilità',
+    'Cinque note su e giù, sulla scala maggiore. L\'app le suona, poi tace: tu le ripeti. Ogni volta che la prendi pulita, la volta dopo è più veloce.');
+  if (!await preparaMicrofono(corpo)) return;
+  const ui = palco(corpo, 'Suonami la scala');
+  const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 52, alto: 62 };
+  const fatte = store.sessioniDi('agilita');
+  // La velocità riparte da dove eri arrivato, non da capo: il senso dell'esercizio è che
+  // il numero salga fra una settimana e l'altra.
+  let msPerNota = fatte.length ? Math.max(180, Math.min(700, fatte[0].msPerNota || 520)) : 520;
+
+  ui.pulsante.addEventListener('click', async () => {
+    ui.pulsante.disabled = true;
+    const tonica = notaOppureSpiega({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - 7) }, ui);
+    if (tonica === null) return;
+    const sequenza = scalaAgilita(tonica);
+    const r = await giro({
+      note: sequenza,
+      bersaglio: tonica,
+      durataNotaMs: msPerNota,
+      ascoltaMs: Math.round(sequenza.length * msPerNota * 1.8) + 1500,
+      invito: `ripetila, dal ${nome(tonica)}`,
+      giudica: (racc) => giudicaAgilita(
+        confrontaSequenza(segmentaNote(racc.serieMidi, racc.dtMs, { minMs: Math.max(70, msPerNota * 0.35) }), sequenza),
+        { msAttesi: sequenza.length * msPerNota },
+      ),
+    }, ui);
+    ui.esiti.prepend(cartaVerdetto(r.verdetto));
+    ui.esiti.prepend(nota(`Era: ${sequenza.map(nome).join(' ')} — ${(60000 / msPerNota).toFixed(0)} note al minuto.`));
+    if (r.verdetto.promosso) msPerNota = Math.max(180, Math.round(msPerNota * 0.85));
+    store.salvaSessione({ esercizio: 'agilita', tonica, msPerNota, promosso: r.verdetto.promosso });
+    ui.pulsante.disabled = false;
+    ui.pulsante.textContent = r.verdetto.promosso ? 'Più veloce' : 'Ancora';
+  });
+}
+
+// ── schermata: orecchio ──────────────────────────────────────────────────────
+
+function vistaOrecchio() {
+  const corpo = schermata('Orecchio',
+    'Qui non si canta: si riconosce. L\'app suona due note, tu dici che intervallo era. Quelli che sbagli tornano presto, quelli che azzecchi si diradano.');
+  const ui = { esiti: el('div', 'esiti') };
+  const domanda = el('div', 'domanda');
+  const risposte = el('div', 'risposte');
+  const suona = el('button', 'principale', 'Suona le due note');
+  corpo.append(domanda, suona, risposte, ui.esiti);
+
+  const usabili = INTERVALLI.filter((i) => i.facilita <= 4);
+  const schede = store.schede(usabili.map((i) => `int-${i.semitoni}`));
+  const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 55, alto: 64 };
+  let corrente = null;
+  let partenza = null;
+  let risposto = false;
+
+  const consolidato = consolidamento(schede);
+  domanda.appendChild(el('p', 'dim', `Ne conosci ${Math.round(consolidato * 100)}%. ${daRivedere(schede, Date.now()).length} da rivedere adesso.`));
+
+  const mostraRisposte = () => {
+    risposte.replaceChildren();
+    usabili.forEach((i) => {
+      const b = el('button', 'secondario', i.nome);
+      b.addEventListener('click', () => {
+        if (risposto || !corrente) return;
+        risposto = true;
+        const giusto = i.semitoni === corrente.semitoni;
+        const s = schede.find((x) => x.id === `int-${corrente.semitoni}`);
+        store.salvaScheda(rispondi(s, giusto, Date.now()));
+        ui.esiti.prepend(cartaVerdetto({
+          titolo: giusto ? `Sì: ${corrente.nome}` : `Era una ${corrente.nome}`,
+          promosso: giusto,
+          righe: [`${nome(partenza)} → ${nome(partenza + corrente.semitoni)}`],
+          dettaglio: giusto ? '' : `Hai detto ${i.nome}. Riascoltale: la differenza sta ${Math.abs(i.semitoni - corrente.semitoni) === 1 ? 'in un semitono solo, ed è la più difficile da sentire' : 'in ' + Math.abs(i.semitoni - corrente.semitoni) + ' semitoni'}.`,
+        }));
+        store.salvaSessione({ esercizio: 'orecchio', intervallo: corrente.nome, promosso: giusto });
+        suona.textContent = 'Un altro';
+        suana();
+      });
+      risposte.appendChild(b);
+    });
+  };
+  const suana = () => { risposte.querySelectorAll('button').forEach((b) => { b.disabled = risposto; }); };
+
+  suona.addEventListener('click', async () => {
+    await audio.sblocca();
+    if (risposto || !corrente) {
+      const s = prossima(schede, Date.now());
+      corrente = usabili.find((i) => `int-${i.semitoni}` === s.id);
+      partenza = notaDaDare({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - corrente.semitoni) }, Math.random())
+        || Math.round(zona.basso);
+      risposto = false;
+      suana();
+    }
+    suona.disabled = true;
+    // Le due note una dopo l'altra, con una pausa: suonate insieme sarebbero un accordo,
+    // e riconoscere un accordo è un altro esercizio.
+    await audio.daiLeNote([hz(partenza), hz(partenza + corrente.semitoni)], { durataMs: 900, pausaMs: 90 });
+    suona.disabled = false;
+    suona.textContent = 'Riascoltale';
+  });
+  mostraRisposte();
+  suana();
+}
+
+// ── schermata: canta quello che suoni ────────────────────────────────────────
+
+async function vistaStrumento() {
+  const corpo = schermata('Canta quello che suoni',
+    'Suona una nota sul tuo strumento — piano, tastiera, chitarra, ukulele, quello che hai. L\'app la riconosce, poi tace, e tu la canti. È il ponte vero fra strumento e voce, e all\'app non cambia niente quale strumento sia.');
+  if (!await preparaMicrofono(corpo)) return;
+  const ui = palco(corpo, 'Sono pronto: suona');
+  corpo.insertBefore(nota('Una nota alla volta, lasciata suonare. L\'app riconosce l\'altezza da 70 a 1300 Hz; sulle corde gravi del pianoforte legge fino a un quarto di semitono crescente — è la rigidità delle corde, non la tua — e per questo il bersaglio da cantare è il semitono temperato più vicino, non la frequenza letta.'), ui.quadrante.nodo);
+
+  ui.pulsante.addEventListener('click', async () => {
+    ui.pulsante.disabled = true;
+    ui.stato.textContent = 'suona una nota…';
+    ui.stato.className = 'stato ascolta';
+    ascolto.dimenticaLaStanza();
+    const trovata = await ascolto.aspettaUnaNota(10000, (l) => ui.quadrante.aggiorna(l, l.hz));
+    if (!trovata) {
+      ui.stato.className = 'stato';
+      ui.stato.textContent = 'Non ho sentito nessuna nota. Riprova più vicino.';
+      ui.pulsante.disabled = false;
+      return;
+    }
+    const m = midiVicino(trovata);
+    ui.esiti.prepend(nota(`Hai suonato un ${nome(m)} (${trovata.toFixed(1)} Hz, ${centesimiDa(trovata, m)} rispetto al temperato).`));
+
+    await pausa(400);
+    ascolto.dimenticaLaStanza();
+    ui.stato.textContent = `adesso cantalo: ${nome(m)}`;
+    ui.stato.className = 'stato canta';
+    const racc = await ascolto.raccogli(hz(m), 4500, (l, a) => {
+      ui.quadrante.aggiorna(l, hz(m));
+      ui.progresso.style.width = `${Math.min(100, a * 100).toFixed(0)}%`;
+    });
+    ui.progresso.style.width = '0';
+    ui.stato.textContent = '';
+    ui.stato.className = 'stato';
+    ui.quadrante.spegni();
+    const v = giudicaNotaTenuta(racc);
+    ui.esiti.prepend(cartaVerdetto(v));
+    store.salvaSessione({ esercizio: 'strumento', nota: m, promosso: v.promosso });
+    ui.pulsante.disabled = false;
+    ui.pulsante.textContent = 'Un\'altra';
+  });
+}
+
+const centesimiDa = (frequenza, m) => {
+  const c = 1200 * Math.log2(frequenza / hz(m));
+  return `${c >= 0 ? '+' : '−'}${Math.abs(c).toFixed(0)} centesimi`;
+};
+
+// ── schermata: melodie ───────────────────────────────────────────────────────
+
+async function vistaMelodia() {
+  const corpo = schermata('Melodie',
+    'L\'app inventa una melodia dentro la tua zona comoda, la suona, poi tace. Tu la ricanti a memoria.');
+  if (!await preparaMicrofono(corpo)) return;
+  const ui = palco(corpo, 'Inventamene una');
+  corpo.insertBefore(nota('Le melodie sono GENERATE, non prese da nessuna canzone: camminano sui gradi di una scala. Non è una limitazione tecnica — una melodia vera ha un autore, e questa app non ha nessun diritto di dartela.'), ui.quadrante.nodo);
+  const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 52, alto: 62 };
+  let seme = Math.floor(Math.random() * 100000);
+
+  ui.pulsante.addEventListener('click', async () => {
+    ui.pulsante.disabled = true;
+    const tonica = notaOppureSpiega({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - 8) }, ui);
+    if (tonica === null) return;
+    seme += 1;
+    const ambito = Math.max(3, Math.min(8, Math.round(zona.alto - tonica)));
+    const melodia = melodiaGenerata(tonica, { passi: 6, seme, ambito });
+    const r = await giro({
+      note: melodia,
+      bersaglio: tonica,
+      durataNotaMs: 620,
+      ascoltaMs: melodia.length * 900 + 1500,
+      invito: 'ricantala',
+      giudica: (racc) => giudicaMelodia(
+        confrontaSequenza(segmentaNote(racc.serieMidi, racc.dtMs, { minMs: 120 }), melodia),
+      ),
+    }, ui);
+    ui.esiti.prepend(cartaVerdetto(r.verdetto));
+    ui.esiti.prepend(nota(`Era: ${melodia.map(nome).join(' ')}.`));
+    store.salvaSessione({ esercizio: 'melodia', promosso: r.verdetto.promosso });
+    ui.pulsante.disabled = false;
+    ui.pulsante.textContent = 'Un\'altra';
+  });
+}
+
+// ── casa ─────────────────────────────────────────────────────────────────────
 
 function vistaCasa() {
   app.replaceChildren();
@@ -519,13 +746,22 @@ function vistaCasa() {
   }
   corpo.appendChild(riquadro);
 
-  ESERCIZI.forEach((x) => {
-    const a = el('a', 'carta');
+  const o = oggi(d);
+  if (o.prossimo) {
+    const p = el('a', 'carta primo');
+    p.href = o.prossimo.rotta;
+    p.appendChild(el('i', 'contatore', `${o.fatti} su ${o.totale}`));
+    p.appendChild(el('b', null, `Oggi: ${o.prossimo.titolo}`));
+    p.appendChild(el('span', null, `${o.prossimo.sotto} — criterio: ${o.prossimo.obiettivo}.`));
+    corpo.appendChild(p);
+  }
+
+  o.gradini.forEach((x) => {
+    const a = el('a', `carta${x.fatto ? ' fatto' : ''}`);
     a.href = x.rotta;
-    a.appendChild(el('b', null, x.titolo));
+    a.appendChild(el('b', null, `${x.fatto ? '✓ ' : ''}${x.titolo}`));
     a.appendChild(el('span', null, x.sotto));
-    const fatte = store.sessioniDi(x.id === 'nota' ? 'nota-tenuta' : x.id).length;
-    if (fatte) a.appendChild(el('i', 'contatore', `${fatte} volte`));
+    if (x.volte) a.appendChild(el('i', 'contatore', `${x.volte} volte`));
     corpo.appendChild(a);
   });
 
@@ -553,8 +789,11 @@ function vistaInfo() {
     <p class="dim">Se hai una <b>bella voce</b>: non è una misura.</p>
     <p class="dim">La <b>salute vocale</b>. Se cantando ti fa male qualcosa si smette e si va da un umano.</p>
     <h2>Come si comporta</h2>
-    <p class="dim">L'app e la tua voce <b>non suonano mai insieme</b>: lei dà la nota, tace, e solo dopo misura. È anche il motivo per cui la misura è credibile — un programma che emette mentre ascolta si dà da solo la risposta che sperava.</p>
+    <p class="dim">L'app e la tua voce <b>non suonano mai insieme</b>: lei dà la nota, tace, e solo dopo misura. È anche il motivo per cui la misura è credibile — un programma che emette mentre ascolta si dà da solo la risposta che sperava. Misurato: mentre l'app ascolta, dalla sua uscita escono <b>162 dB</b> meno che mentre suona.</p>
     <p class="dim">Il verdetto sta sulla frase, non sulla nota, e la tendenza conta più dell'istante.</p>
+    <p class="dim">Quando una cosa non la può misurare lo <b>dice</b> invece di inventarla: se le letture arrivano troppo rade non parla di vibrato, se il glissando non ha un gradino netto non ti indica un passaggio, se l'estensione esce di meno di tre semitoni non la salva.</p>
+    <h2>Le melodie</h2>
+    <p class="dim">Sono <b>generate</b>, non prese da nessuna canzone: camminano sui gradi di una scala. Una sequenza di accordi non è protetta dal diritto d'autore, una melodia sì — è proprio quello che il diritto d'autore protegge in una canzone. Questa app non ha nessun diritto di darti quella di qualcun altro.</p>
     <h2>I tuoi dati</h2>
     <p class="dim">Restano nel telefono, in questa pagina. Nessun account, nessun server.</p>`;
   const b = el('button', 'secondario', 'Dimentica tutto quello che sai di me');
@@ -568,9 +807,14 @@ const ROTTE = {
   '#/': vistaCasa,
   '#/nota': vistaNotaTenuta,
   '#/estensione': vistaEstensione,
+  '#/passaggio': vistaPassaggio,
   '#/attacco': vistaAttacco,
   '#/intervalli': vistaIntervalli,
   '#/fiato': vistaFiato,
+  '#/agilita': vistaAgilita,
+  '#/orecchio': vistaOrecchio,
+  '#/strumento': vistaStrumento,
+  '#/melodia': vistaMelodia,
   '#/info': vistaInfo,
 };
 
@@ -590,4 +834,4 @@ window.addEventListener('hashchange', vai);
 vai();
 
 // Per il collaudo in pagina.
-window.__canto = { store, ESERCIZI };
+window.__canto = { store, rotte: Object.keys(ROTTE) };
