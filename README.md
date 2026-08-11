@@ -5,8 +5,13 @@ Indipendente dallo strumento: strumento e voce **si alternano e non suonano mai 
 (vedi §0 di [AVVIO.md](AVVIO.md) — è la decisione che fa sparire il problema difficile
 invece di aggirarlo).
 
+- **Online: <https://mrbagigio.github.io/canto-coach/>** — serve https per il microfono,
+  quindi `prova-zero.html` sul telefono si apre da lì, non da localhost.
+- Repo: `MrBagigio/canto-coach`
 - Cartella di lavoro: `C:\Users\alexg\Documents\canto-coach`
 - In locale: `node tools/serve.mjs` → 4181 (voce `canto` nel launch.json di MetaUpgrader)
+- Per pubblicare: `node tools/carica-commit.mjs` (prova a vuoto) poi `--scrivi`. Da qui la
+  spinta con git è bloccata dall'hook, si passa dalla API Git Data.
 - **Banco: [`collaudo.html`](collaudo.html) — 176 prove, tutte verdi.**
 - **Sul telefono: [`prova-zero.html`](prova-zero.html)** — misura la tua stanza e la tua voce.
 
