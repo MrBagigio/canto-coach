@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark;
+  --fondo: #14100d;
+  --carta: #1c1713;
+  --testo: #f2ece5;
+  --dim: #a89e94;
+  --linea: #332c26;
+  --ambra: #e0a458;
+  --verde: #6fcf97;
+  --rosso: #e2725b;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--fondo); color: var(--testo); }
+body { font: 16px/1.55 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+#app { max-width: 640px; margin: 0 auto; padding: 20px 16px calc(50px + env(safe-area-inset-bottom)); }
+
+.testa { margin-bottom: 14px; }
+.testa h1 { font-size: 1.45rem; margin: 2px 0 6px; line-height: 1.2; }
+.occhiello { color: var(--ambra); font-size: .76rem; letter-spacing: .1em; text-transform: uppercase; margin: 0; }
+.dim { color: var(--dim); font-size: .9rem; margin: 0 0 12px; }
+.spiega { border-left: 2px solid var(--linea); padding-left: 12px; }
+.indietro { background: none; border: 0; color: var(--dim); font-size: .9rem; padding: 6px 0; margin: 0 0 4px; }
+
+a.carta {
+  display: block; text-decoration: none; color: inherit; position: relative;
+  border: 1px solid var(--linea); border-radius: 16px; padding: 15px 17px; margin: 11px 0;
+  background: var(--carta);
+}
+a.carta b { display: block; font-size: 1.06rem; margin-bottom: 3px; }
+a.carta span { color: var(--dim); font-size: .87rem; }
+a.carta.piccola { background: none; }
+.contatore { position: absolute; top: 15px; right: 16px; font-style: normal; font-size: .76rem; color: var(--ambra); }
+
+.tuoi-numeri { border: 1px solid var(--linea); border-radius: 16px; padding: 14px 17px; margin: 0 0 18px;
+  background: linear-gradient(180deg, rgba(224,164,88,.09), transparent); }
+.tuoi-numeri b { display: block; font-size: 1.05rem; }
+.tuoi-numeri span { color: var(--dim); font-size: .84rem; }
+
+button.principale {
+  width: 100%; padding: 17px; font-size: 1.06rem; font-weight: 700; border: 0; border-radius: 15px;
+  background: var(--ambra); color: #1a1410; margin: 12px 0 6px;
+}
+button.principale:disabled { opacity: .32; }
+button.secondario {
+  width: 100%; padding: 14px; font-size: .96rem; border: 1px solid var(--linea); border-radius: 15px;
+  background: none; color: var(--dim); margin: 6px 0;
+}
+
+/* Il quadrante: l'unica cosa che si guarda mentre si canta, quindi grosso. */
+.quadrante { margin: 8px 0 4px; }
+.scala { position: relative; height: 54px; border-radius: 12px; background: var(--carta);
+  border: 1px solid var(--linea); overflow: hidden; }
+.scala .zona { position: absolute; left: 32.5%; width: 35%; top: 0; bottom: 0;
+  background: rgba(111,207,151,.12); border-left: 1px solid rgba(111,207,151,.3);
+  border-right: 1px solid rgba(111,207,151,.3); }
+.scala .ago { position: absolute; left: 50%; top: 4px; bottom: 4px; width: 4px; margin-left: -2px;
+  border-radius: 2px; background: var(--ambra); opacity: .25; transition: left .07s linear, opacity .2s; }
+.scala .tacca { position: absolute; bottom: 3px; font-size: .68rem; color: var(--dim); }
+.scala .tacca.sx { left: 6px; } .scala .tacca.c { left: 50%; transform: translateX(-50%); } .scala .tacca.dx { right: 6px; }
+.lettura { text-align: center; font-size: 2.1rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  margin: 6px 0 2px; line-height: 1.1; }
+.lettura.dentro { color: var(--verde); }
+.lettura.fuori { color: var(--ambra); }
+.lettura.dim { color: var(--dim); font-size: 1rem; font-weight: 400; }
+.livello { height: 8px; border-radius: 4px; background: #241d18; overflow: hidden; }
+.livello i { display: block; height: 100%; width: 0; background: var(--dim); transition: width .06s linear; }
+
+.stato { text-align: center; font-size: 1rem; min-height: 1.5em; color: var(--dim); margin: 4px 0; }
+.stato.ascolta { color: var(--ambra); }
+.stato.canta { color: var(--verde); font-weight: 600; }
+.progresso-fuori { height: 3px; border-radius: 2px; background: #241d18; overflow: hidden; }
+.progresso { height: 100%; width: 0; background: var(--verde); transition: width .1s linear; }
+
+.verdetto { border: 1px solid var(--linea); border-radius: 14px; padding: 13px 16px; margin: 12px 0; background: var(--carta); }
+.verdetto.si { border-color: rgba(111,207,151,.45); background: rgba(111,207,151,.07); }
+.verdetto.no { border-color: rgba(224,164,88,.4); background: rgba(224,164,88,.06); }
+.verdetto b { font-size: 1.05rem; }
+.verdetto p { margin: 6px 0 0; font-size: .9rem; }
+ul.misure { margin: 9px 0 0; padding-left: 18px; color: var(--dim); font-size: .84rem; }
+ul.misure.grande { font-size: .92rem; }
+ul.misure li { margin: 3px 0; }
+ul.misure b { color: var(--testo); }
+
+.avviso { border: 1px solid var(--ambra); border-radius: 12px; padding: 11px 14px; margin: 10px 0;
+  font-size: .86rem; background: rgba(224,164,88,.08); }
+
+h2 { font-size: 1.02rem; margin: 24px 0 8px; }
+.esiti { margin-top: 6px; }

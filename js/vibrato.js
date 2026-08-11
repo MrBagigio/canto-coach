@@ -24,6 +24,22 @@ export const HZ_MIN = 3.5;
 export const HZ_MAX = 9.0;
 
 /**
+ * Il passo di lettura più grosso con cui un vibrato è ancora misurabile.
+ *
+ * Si RICAVA dalla banda, non si sceglie: per vedere un'oscillazione a 9 Hz servono almeno
+ * tre letture per periodo, cioè 1/(3·9) = 37 ms. Sopra, l'autocorrelazione non ha
+ * abbastanza punti e restituisce «nessun vibrato» — che è una risposta indistinguibile da
+ * «voce ferma» e verrebbe scritta a schermo come tale.
+ *
+ * Non è un caso di scuola. Il ciclo di lettura gira su `setInterval` a 25 ms, e un browser
+ * che tiene la pagina in secondo piano lo strozza a 1000: se l'utente cambia scheda mentre
+ * tiene la nota, l'app riceve quaranta volte meno letture e — senza questo controllo —
+ * dichiarerebbe «voce ferma» a chi sta facendo un vibrato perfetto. È il difetto numero
+ * uno di questa famiglia di progetti: dichiarare ciò che non si sta misurando.
+ */
+export const PASSO_MASSIMO_MS = 1000 / (3 * HZ_MAX);
+
+/**
  * Retta ai minimi quadrati su una serie campionata a passo fisso.
  * @returns {{intercetta:number, pendenza:number}} pendenza in unità/secondo
  */
@@ -80,6 +96,22 @@ export function scomponi(centesimi, dtMs) {
 
   const media = centesimi.reduce((a, b) => a + b, 0) / n;
   const { intercetta, pendenza } = retta(centesimi, dtMs);
+  // Media e calo sopravvivono a un passo grosso; il vibrato no. Si dichiara quello che si
+  // può ancora dire, e si TACE su quello che non si sa — invece di dire «voce ferma».
+  if (dtMs > PASSO_MASSIMO_MS) {
+    return {
+      media,
+      deriva: pendenza,
+      intercetta,
+      hz: null,
+      ampiezza: 0,
+      fermezza: 0,
+      confidenza: 0,
+      misurabile: false,
+      vibratoMisurabile: false,
+      motivo: `letture ogni ${dtMs.toFixed(0)} ms: per vedere un vibrato ne servono almeno tre per periodo, cioè una ogni ${PASSO_MASSIMO_MS.toFixed(0)} ms o meno`,
+    };
+  }
   // Si toglie la RETTA, non la media: se la voce cala, il calo non è vibrato e sottraendo
   // solo la media resterebbe dentro il residuo a gonfiare l'ampiezza.
   const dt = dtMs / 1000;
@@ -143,6 +175,7 @@ export function scomponi(centesimi, dtMs) {
     fermezza,
     confidenza,
     misurabile: true,
+    vibratoMisurabile: true,
     motivo: periodico ? '' : 'oscillazione non periodica: è instabilità, non vibrato',
   };
 }

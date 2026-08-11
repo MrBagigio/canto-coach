@@ -12,14 +12,69 @@ invece di aggirarlo).
 - In locale: `node tools/serve.mjs` → 4181 (voce `canto` nel launch.json di MetaUpgrader)
 - Per pubblicare: `node tools/carica-commit.mjs` (prova a vuoto) poi `--scrivi`. Da qui la
   spinta con git è bloccata dall'hook, si passa dalla API Git Data.
-- **Banco: [`collaudo.html`](collaudo.html) — 176 prove, tutte verdi.**
+- **Banco: [`collaudo.html`](collaudo.html) — 242 prove, tutte verdi.**
 - **Sul telefono: [`prova-zero.html`](prova-zero.html)** — misura la tua stanza e la tua voce.
 
 Il motore viene da [ukulele-coach](../ukulele-coach) (`js/pitch.js`). Le prove 0–4
 dell'AVVIO §4 sono state fatte **prima di qualunque schermata**, ed è stato giusto:
 hanno trovato due difetti veri e smentito uno dei tre sospetti del documento.
 
-## Stato: prove 0–4 fatte, zero curriculum
+## Gli esercizi
+
+`index.html` è l'app. Cinque esercizi del §2, nell'ordine del documento, tutti costruiti
+sullo stesso motore: **l'app dà la nota → TACE → tu canti → l'app misura**. L'alternanza
+non è una scelta di interfaccia, è la ragione per cui la misura è credibile, e sta scritta
+in un posto solo (`giro()` in `js/app.js`) così non può divergere fra una schermata e
+l'altra. Il collaudo la verifica in dB: mentre l'app misura, dalla sua uscita escono
+**−180 dBFS, 162 dB sotto** il livello della nota.
+
+| esercizio | cosa misura |
+|---|---|
+| Nota tenuta | intonazione media, calo, vibrato o fermezza |
+| La tua estensione | i due numeri da cui l'app ricava tutte le note che ti darà |
+| Attacco pulito | i primi 150 ms contro il resto della *tua* nota |
+| Intervalli | la distanza cantata, non l'intonazione assoluta |
+| Fiato | secondi **dentro tolleranza**, non secondi di rumore |
+
+**Partenza a freddo, senza tabelle di tipi vocali.** La prima volta l'app non sa dove sta
+comoda la tua voce, e darti una nota a caso vorrebbe dire darti quella di un altro
+(«se l'app dà un La4 a un baritono, quello canta un La3 e l'app dice che ha sbagliato di
+dodici semitoni: ha sbagliato l'app»). Quindi te lo chiede cantando: mugoli una nota
+qualunque, e da lì nasce una zona provvisoria che l'esercizio dell'estensione sostituirà
+con quella vera.
+
+**La tolleranza è 35 centesimi** — un terzo di semitono. Non è severità dosata a occhio:
+lo strumento sbaglia al massimo 7,5 centesimi, e il collaudo verifica che ci sia almeno un
+fattore quattro fra i due, altrimenti l'app starebbe giudicando il rumore della propria
+misura e lo chiamerebbe intonazione.
+
+### Quattro difetti trovati GUIDANDO l'app, non leggendo il codice
+
+Nessuno dei quattro dava un errore in console, e il collaudo era verde con tutti e quattro
+dentro (vedi [[feedback-verify-everything-except-looking]] negli altri progetti).
+
+1. **«voce ferma, oscillazione ±135 centesimi»** — una frase che si contraddice da sola.
+   `scomponi` lo sapeva già (restituisce «oscillazione non periodica: è instabilità, non
+   vibrato»), era il verdetto a non ascoltarlo. Ora sopra la tolleranza si chiama
+   instabilità e non viene promossa.
+2. **Contava le letture invece dei millisecondi.** «Venti letture stabili» sono mezzo
+   secondo a pagina davanti e **venti secondi** a pagina in secondo piano, dove il browser
+   strozza `setInterval` da 25 ms a 1000: l'app diceva «non ti ho sentito» a chi stava
+   cantando benissimo. Stessa lezione che nell'ukulele era costata il conteggio delle
+   battute su `requestAnimationFrame`.
+3. **«voce ferma» dichiarata senza averla misurata.** Alla cadenza strozzata `scomponi`
+   non trova nessun vibrato, e la risposta è indistinguibile da «voce ferma». Ora sopra
+   **37 ms** di passo — tre letture per periodo a 9 Hz, ricavato dalla banda — l'app dice
+   che il vibrato non l'ha misurato, e continua a dire l'intonazione media, che invece sa.
+4. **Un'estensione di zero semitoni veniva salvata** e poi usata per decidere ogni nota
+   successiva: un'app che ti fa cantare per sempre lo stesso La3, convinta di sapere
+   qualcosa di te. Sotto i tre semitoni ora non si salva niente e si dice perché.
+
+E uno di comportamento: i primi 400 ms di una nota sono l'attacco, non la tenuta, e
+includerli faceva risultare instabile una nota tenuta benissimo. L'attacco ha un esercizio
+suo, dove viene giudicato con il metro giusto.
+
+## Prima: prove 0–4 sul motore
 
 ### Prova 0 — il rilevatore segue la voce? Sì
 
@@ -143,7 +198,12 @@ un quarto di semitono.
 
 ## Ancora da fare
 
-Gli esercizi del §2, in ordine, a partire da nota tenuta ed estensione — e la nota di
-riferimento **generata dall'app**, con armoniche (una sinusoide pura è difficile da
-agganciare per l'orecchio) e **nella tua ottava**, che si sa solo dopo aver misurato
-l'estensione.
+I gradini 3, 7, 8 e 10 del §2: passaggio di registro (glissando lento in salita, cercando
+il salto), scale e agilità a velocità crescente, orecchio (riconoscere gli intervalli
+invece di produrli), melodie. E il gradino 9 — «canta quello che suoni» — che il motore già
+regge: la prova 4 dice entro quanto riconosce una nota di chitarra, ukulele e pianoforte.
+
+Il diritto d'autore sulle melodie (§6) va deciso **prima** di riempire il repertorio: una
+sequenza di accordi non è protetta e infatti le altre tre app hanno una libreria di giri,
+ma una melodia lo è. Vie pulite: melodie generate, pubblico dominio, o inserite dall'utente
+e mai uscite dal telefono.

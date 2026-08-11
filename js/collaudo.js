@@ -11,11 +11,14 @@
 // Ogni gruppo stampa MISURE oltre ai giudizi. Un numero nascosto dentro una prova verde
 // non si legge mai, e quando un giorno il margine si assottiglia non se ne accorge nessuno.
 
-import { Rilevatore, centesimi, nota } from './pitch.js';
+import { Rilevatore, centesimi, nota, hzDaMidi } from './pitch.js';
 import {
   TIMBRI, armonicheVoce, armonicheStrumento, banco, attendi, contestoPronto, rmsDiParziali, dbfs,
 } from './banco.js';
-import { scomponi, retta, calo } from './vibrato.js';
+import { scomponi, retta, calo, PASSO_MASSIMO_MS } from './vibrato.js';
+import * as audio from './audio.js';
+import * as esercizi from './esercizi.js';
+import { nome as nomeIt, MIDI_MIN, MIDI_MAX } from './teoria.js';
 
 const gruppi = [];
 
@@ -823,6 +826,290 @@ gruppo('Il banco — i livelli sono quelli dichiarati', (t) => {
       t.misura('RMS teorico del mugolato normalizzato', rmsDiParziali(armonicheVoce(220, 'hum')).toFixed(4));
     } finally { await ctx.close().catch(() => {}); }
   };
+});
+
+// ── L'ALTERNANZA — la regola su cui sta in piedi tutto ───────────────────────
+//
+// «L'app non deve suonare mentre misura» (§2 dell'AVVIO). Non è una buona intenzione da
+// dichiarare: è un numero da misurare in dB. Nell'ukulele il click del metronomo stava
+// dentro la banda delle corde e veniva contato come una pennata dell'utente — l'esercizio
+// risultava suonato benissimo a strumento appoggiato sul tavolo. Un programma che emette
+// mentre ascolta si dà da solo la risposta che sperava, e la contaminazione ha SEMPRE lo
+// stesso segno: fa sembrare che funzioni.
+//
+// Qui l'alternanza toglie il problema alla radice, ma «toglie» va verificato: si ascolta
+// il bus di uscita dell'app e si misura quanto ne esce durante la finestra in cui l'app
+// crede di stare misurando la voce.
+
+function rmsDi(an) {
+  const buf = new Float32Array(an.fftSize);
+  an.getFloatTimeDomainData(buf);
+  let s = 0;
+  for (let i = 0; i < buf.length; i += 1) s += buf[i] * buf[i];
+  return Math.sqrt(s / buf.length);
+}
+
+gruppo('Alternanza — l\'app tace davvero mentre misura', (t) => {
+  t.asincrono = async () => {
+    if (!await audio.sblocca()) {
+      t.ok('prove audio eseguite', false, 'il browser tiene l\'audio sospeso: premi «Rifai le prove audio»');
+      return;
+    }
+    const c = audio.contesto();
+    const an = c.createAnalyser();
+    an.fftSize = 2048;
+    an.smoothingTimeConstant = 0;
+    audio.uscita().connect(an);
+    try {
+      const DURATA = 600;
+      // La promessa NON si aspetta: `onended` è un evento del ciclo principale e qui si
+      // sta per bloccare il ciclo principale con l'attesa attiva sull'orologio audio.
+      // L'oscillatore è programmato sull'orologio dell'audio e suona lo stesso.
+      audio.daiLaNota(440, { durataMs: DURATA });
+      attendi(c, 350);
+      const durante = rmsDi(an);
+      // Fine nota + coda dell'inviluppo + la guardia che l'app si prende prima di credere
+      // al microfono. Da qui in poi, per l'app, tutto quello che si sente sei tu.
+      attendi(c, DURATA + 260 + 300 - 350 + 120);
+      const dopo = rmsDi(an);
+      const distanza = 20 * Math.log10(Math.max(dopo, 1e-9) / Math.max(durante, 1e-9));
+      t.misura('uscita dell\'app: mentre suona · mentre misura',
+        `${dbfs(durante).toFixed(1)} dBFS · ${dbfs(dopo).toFixed(1)} dBFS = ${distanza.toFixed(0)} dB sotto`);
+      t.ok('durante la nota l\'app suona davvero', durante > 0.01, `${dbfs(durante).toFixed(1)} dBFS`);
+      t.ok('durante la finestra di misura l\'app è almeno 60 dB più giù',
+        distanza <= -60, `${distanza.toFixed(1)} dB`);
+      t.ok('e in assoluto è sotto i −80 dBFS', dbfs(dopo) < -80, `${dbfs(dopo).toFixed(1)} dBFS`);
+
+      // La nota di riferimento è DAVVERO quella nota, e ha armoniche: una sinusoide pura
+      // è difficile da agganciare per l'orecchio, e chi non è allenato ci canta sopra a
+      // caso. Questa prova è l'unica cosa che tiene onesta quella decisione di §2.
+      audio.daiLaNota(hzDaMidi(57), { durataMs: 900 }); // La3, 220 Hz
+      attendi(c, 400);
+      const r = new Rilevatore(an);
+      const letto = r.leggi();
+      const sp = new Float32Array(an.frequencyBinCount);
+      an.getFloatFrequencyData(sp);
+      const binHz = c.sampleRate / an.fftSize;
+      const a = (n) => sp[Math.round((220 * n) / binHz)];
+      attendi(c, 900);
+      t.ok('la nota di riferimento è quella chiesta', letto.hz && Math.abs(centesimi(letto.hz, 220)) < 10,
+        letto.hz ? `${centesimi(letto.hz, 220).toFixed(1)} cent (${letto.hz.toFixed(1)} Hz)` : 'nessuna lettura');
+      t.misura('parziali della nota di riferimento, rispetto alla fondamentale',
+        [2, 3, 4, 5].map((n) => `${n}ª ${(a(n) - a(1)).toFixed(0)} dB`).join(' · '));
+      t.ok('non è una sinusoide: la 2ª e la 3ª parziale ci sono',
+        a(2) - a(1) > -30 && a(3) - a(1) > -40,
+        `2ª ${(a(2) - a(1)).toFixed(0)} dB, 3ª ${(a(3) - a(1)).toFixed(0)} dB sotto la fondamentale`);
+    } finally {
+      audio.uscita().disconnect(an);
+      audio.chiudi();
+    }
+  };
+});
+
+// ── Gli esercizi: le decisioni, una per una ──────────────────────────────────
+
+gruppo('Esercizi — che nota dare, e a chi', (t) => {
+  t.ok('la tolleranza sta molto sopra l\'incertezza dello strumento',
+    esercizi.TOLLERANZA >= esercizi.INCERTEZZA_STRUMENTO * 4,
+    `${esercizi.TOLLERANZA} contro ${esercizi.INCERTEZZA_STRUMENTO}: sotto un fattore 4 l'app starebbe giudicando il rumore della propria misura e chiamandolo intonazione`);
+
+  // La zona comoda non è tutta l'estensione: gli estremi sono dove si arriva, non dove si sta.
+  const baritono = { grave: 43, acuto: 64 };   // Sol2 → Mi4
+  const z = esercizi.zonaComoda(baritono);
+  t.ok('la zona comoda sta dentro l\'estensione', z.basso > baritono.grave && z.alto < baritono.acuto,
+    `${z.basso}–${z.alto} dentro ${baritono.grave}–${baritono.acuto}`);
+  t.misura('estensione Sol2→Mi4 (21 semitoni) → zona comoda', `${nomeIt(z.basso)} → ${nomeIt(z.alto)}`);
+  const stretta = esercizi.zonaComoda({ grave: 57, acuto: 60 });
+  t.ok('su un\'estensione strettissima la zona non si rovescia', stretta.basso <= stretta.alto,
+    `${stretta.basso}–${stretta.alto}`);
+  t.uguale('senza estensione non si inventa una zona', esercizi.zonaComoda(null), null);
+
+  // Il difetto che questa funzione esiste per evitare: dare un La4 a un baritono, che
+  // canta il La3 e si sente dire che ha sbagliato di dodici semitoni.
+  for (const caso of [0, 0.17, 0.33, 0.5, 0.66, 0.83, 0.999]) {
+    const m = esercizi.notaDaDare(z, caso);
+    t.ok(`sorteggio ${caso}: la nota cade nella zona comoda`, m >= z.basso && m <= z.alto,
+      `${nomeIt(m)} fuori da ${nomeIt(z.basso)}–${nomeIt(z.alto)}`);
+  }
+  // Il rilevatore guarda da 70 a 1300 Hz. Una zona che sborda va TAGLIATA sulla banda,
+  // non usata com'è: dare una nota che non si sa misurare vorrebbe dire chiedere di
+  // cantare e poi dire «non ti sento» per colpa propria.
+  const sborda = esercizi.notaDaDare({ basso: 20, alto: MIDI_MIN + 4 }, 0.0);
+  t.ok('una zona che sborda in basso viene tagliata sulla banda', sborda >= MIDI_MIN,
+    `${nomeIt(sborda)} sotto ${nomeIt(MIDI_MIN)}`);
+  const sbordaSu = esercizi.notaDaDare({ basso: MIDI_MAX - 3, alto: 200 }, 0.999);
+  t.ok('e lo stesso in alto', sbordaSu <= MIDI_MAX, `${nomeIt(sbordaSu)} sopra ${nomeIt(MIDI_MAX)}`);
+  t.misura('la banda in cui l\'app può dare una nota', `${nomeIt(MIDI_MIN)} → ${nomeIt(MIDI_MAX)}`);
+  // Fuori del tutto NON si inventa una nota: si dice che non si sa. Il chiamante deve
+  // avere qualcosa da mostrare, altrimenti la schermata scriverebbe «canta il Do-1».
+  t.uguale('una zona tutta fuori banda non produce una nota inventata',
+    esercizi.notaDaDare({ basso: 20, alto: 30 }, 0.5), null);
+  const evitando = esercizi.notaDaDare(z, 0.5, { evita: [Math.round((z.basso + z.alto) / 2)] });
+  t.ok('la nota di prima non torna subito', Math.abs(evitando - Math.round((z.basso + z.alto) / 2)) >= 2,
+    `${nomeIt(evitando)}`);
+
+  const zp = esercizi.zonaDaUnaNota(55);
+  t.ok('dalla prima nota cantata esce una zona provvisoria che la contiene',
+    zp.basso < 55 && zp.alto > 55 && zp.provvisoria === true, JSON.stringify(zp));
+});
+
+/** Una raccolta finta con la forma di quelle vere: serie di centesimi a passo fisso. */
+function raccoltaFinta(fn, { n = 200, dtMs = 25, dentro = 1 } = {}) {
+  return { serie: Array.from({ length: n }, (_, i) => fn((i * dtMs) / 1000, i)), dtMs, dentro };
+}
+
+gruppo('Esercizi — cosa dice di quello che ha sentito', (t) => {
+  // Caso deterministico: un banco che cambia a ogni esecuzione non è un banco.
+  const semino = () => { let s = 12345; return () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648 - 0.5; }; };
+  // Una voce ferma non è una riga dritta: ha un tremolio piccolo e SENZA regolarità.
+  // Il primo tentativo di questa prova usava una sinusoide di ±4 centesimi a 4,8 Hz —
+  // che è un vibrato piccolo, non una voce ferma, e infatti veniva riconosciuto come tale.
+  const caso1 = semino();
+  const ferma = raccoltaFinta(() => 3 * caso1());
+  const v1 = esercizi.giudicaNotaTenuta(ferma);
+  t.ok('una nota tenuta bene viene promossa', v1.promosso, `${v1.titolo} — ${v1.righe.join(' · ')}`);
+
+  // Il calo è il difetto più comune e quello di cui da soli non ci si accorge: deve
+  // essere riconosciuto ANCHE quando la media resta dentro tolleranza, che è il caso
+  // tipico (si parte sopra, si finisce sotto, e in media sembra tutto a posto).
+  const cala = raccoltaFinta((s) => 30 - 14 * s);
+  const v2 = esercizi.giudicaNotaTenuta(cala);
+  t.ok('un calo viene visto anche se la media resta dentro tolleranza',
+    !v2.promosso && /calat/i.test(v2.titolo),
+    `${v2.titolo} (media ${(30 - 14 * 2.5).toFixed(0)} centesimi, dentro i ${esercizi.TOLLERANZA})`);
+
+  // ⚠️ La frase che si contraddiceva da sola, vista guidando l'app: «voce ferma,
+  // oscillazione ±135 centesimi». `scomponi` lo sapeva già («oscillazione non periodica»),
+  // era il verdetto a non ascoltarlo.
+  const caso2 = semino();
+  let x = 0;
+  const balla = esercizi.giudicaNotaTenuta(raccoltaFinta(() => { x = x * 0.85 + 90 * caso2(); return x; }));
+  t.ok('una nota che balla NON viene chiamata «voce ferma»',
+    !/voce ferma/.test(balla.righe.join(' ')), balla.righe.join(' · '));
+  t.ok('e non viene promossa', !balla.promosso, balla.titolo);
+  t.ok('una nota davvero ferma sì', /voce ferma/.test(v1.righe.join(' ')), v1.righe.join(' · '));
+
+  // I primi 400 ms sono l'attacco e non entrano nella tenuta: senza questo taglio, una
+  // partenza da un'altra nota gonfia l'oscillazione e la nota tenuta meglio del mondo
+  // risulta instabile. È successo davvero, guidando l'app.
+  const partenzaAltrove = raccoltaFinta((s) => (s < 0.35 ? -600 : 3));
+  const conTaglio = esercizi.giudicaNotaTenuta(partenzaAltrove);
+  t.ok('una partenza da un\'altra nota non fa bocciare la tenuta', conTaglio.promosso,
+    `${conTaglio.titolo} — ${conTaglio.righe.join(' · ')}`);
+
+  const sotto = esercizi.giudicaNotaTenuta(raccoltaFinta(() => -60));
+  t.ok('stare sotto ma fermi è un verdetto diverso dal calare',
+    !sotto.promosso && /sotto/i.test(sotto.titolo) && !/calat/i.test(sotto.titolo), sotto.titolo);
+
+  const poco = esercizi.giudicaNotaTenuta({ ...ferma, dentro: 0.2 });
+  t.ok('se non ha sentito abbastanza NON giudica la voce', !poco.promosso && /sentito/i.test(poco.titolo),
+    poco.titolo);
+  t.ok('e lo dice come un problema di microfono, non di voce', /telefono|forte/i.test(poco.dettaglio), poco.dettaglio);
+
+  // ⚠️ Il difetto che il collaudo non poteva vedere e la guida in pagina sì: se la scheda
+  // finisce in secondo piano il browser strozza `setInterval` da 25 ms a 1000, l'app
+  // riceve quaranta volte meno letture, e `scomponi` — senza abbastanza punti per periodo
+  // — restituisce «nessun vibrato». Che è indistinguibile da «voce ferma», e veniva
+  // scritto a schermo esattamente così, a uno che magari stava facendo un vibrato
+  // perfetto. È il difetto numero uno di questa famiglia: dichiarare ciò che non si misura.
+  const conVibrato = (dtMs) => raccoltaFinta((s) => 50 * Math.sin(2 * Math.PI * 5.5 * s), { n: Math.round(5000 / dtMs), dtMs });
+  const fitto = esercizi.giudicaNotaTenuta(conVibrato(25));
+  const rado = esercizi.giudicaNotaTenuta(conVibrato(1000 / 3));
+  t.ok('a cadenza normale il vibrato viene visto', /vibrato 5[.,]/.test(fitto.righe.join(' ')),
+    fitto.righe.join(' · '));
+  t.ok('a cadenza strozzata NON scrive «voce ferma»', !/voce ferma/.test(rado.righe.join(' ')),
+    rado.righe.join(' · '));
+  t.ok('e dice invece che il vibrato non l\'ha misurato', /non misurato/.test(rado.righe.join(' ')),
+    rado.righe.join(' · '));
+  t.misura('passo di lettura massimo per vedere un vibrato',
+    `${PASSO_MASSIMO_MS.toFixed(0)} ms — ricavato dalla banda: tre letture per periodo a 9 Hz`);
+  t.ok('ma l\'intonazione media la dice lo stesso, perché quella la sa',
+    /intonazione media/.test(rado.righe.join(' ')), rado.righe.join(' · '));
+
+  // Attacco: chi scivola dentro da sotto ha un problema di attacco anche se la sua media
+  // finale è perfetta — anzi, soprattutto allora. Per questo si confronta l'inizio con la
+  // parte stabile della STESSA nota e non con il bersaglio.
+  const scivola = esercizi.giudicaAttacco(raccoltaFinta((s) => (s < 0.35 ? -90 + 250 * s : 0)));
+  t.ok('lo scivolamento da sotto viene visto', !scivola.promosso && /sotto/i.test(scivola.titolo), scivola.titolo);
+  const pulito = esercizi.giudicaAttacco(raccoltaFinta(() => 5));
+  t.ok('un attacco pulito viene promosso', pulito.promosso, pulito.titolo);
+  const scivolaEBene = esercizi.giudicaAttacco(raccoltaFinta((s) => (s < 0.35 ? -90 + 250 * s : 0)));
+  t.ok('e resta bocciato anche se poi la nota è perfettamente intonata', !scivolaEBene.promosso,
+    'altrimenti l\'esercizio starebbe misurando l\'intonazione, che è già misurata altrove');
+
+  // Intervalli: conta la DISTANZA, non l'intonazione assoluta.
+  const quintaStorta = esercizi.giudicaIntervallo({ centDiPartenza: -40, centDiArrivo: 660, semitoni: 7 });
+  t.ok('una quinta esatta partita calante è comunque una quinta esatta', quintaStorta.promosso,
+    `${quintaStorta.titolo} — ${quintaStorta.righe.join('')}`);
+  const seiSemitoni = esercizi.giudicaIntervallo({ centDiPartenza: 0, centDiArrivo: 600, semitoni: 7 });
+  t.ok('un intervallo sbagliato di un semitono si chiama con il suo nome',
+    !seiSemitoni.promosso && /sbagliat/i.test(seiSemitoni.titolo), seiSemitoni.titolo);
+  const stretta = esercizi.giudicaIntervallo({ centDiPartenza: 0, centDiArrivo: 640, semitoni: 7 });
+  t.ok('una quinta stretta di 60 centesimi non è "sbagliata", è stretta',
+    !stretta.promosso && /strett/i.test(stretta.titolo), stretta.titolo);
+
+  // Fiato: secondi DENTRO tolleranza, non secondi di rumore.
+  const sirena = esercizi.giudicaFiato(raccoltaFinta((s) => -20 * s, { n: 800 }));
+  const tenuta = esercizi.giudicaFiato(raccoltaFinta(() => 10, { n: 800 }));
+  t.misura('venti secondi di nota: una che scivola via · una tenuta',
+    `${sirena.valore.toFixed(1)} s · ${tenuta.valore.toFixed(1)} s`);
+  t.ok('una nota che scivola via non conta come fiato', sirena.valore < tenuta.valore / 2,
+    `${sirena.valore.toFixed(1)} contro ${tenuta.valore.toFixed(1)}`);
+
+  // notaPresa: chi non arriva a un acuto canta l'ottava sotto senza accorgersene.
+  t.ok('una nota cantata un\'ottava sotto NON conta come presa',
+    !esercizi.notaPresa(raccoltaFinta(() => -1200)).presa, 'l\'app attribuirebbe un\'estensione che non c\'è');
+  t.ok('e lo dice chiamandola ottava', /ottava/.test(esercizi.notaPresa(raccoltaFinta(() => -1200)).motivo || ''), '');
+  t.ok('una nota cantata un po\' stonata conta come presa',
+    esercizi.notaPresa(raccoltaFinta(() => 60)).presa, 'l\'estensione non è un esame di intonazione');
+  t.ok('se non l\'ha sentita non conta come presa',
+    !esercizi.notaPresa({ ...raccoltaFinta(() => 0), dentro: 0.2 }).presa, '');
+});
+
+gruppo('Estensione — la macchina a stati', (t) => {
+  // Attenzione al conteggio, che è la cosa su cui questa prova ha già sbagliato una volta:
+  // il PRIMO giro chiede la nota di partenza stessa, quindi cinque «presa» arrivano a
+  // 57−4 e non a 57−5. Sbagliava la prova, non la macchina.
+  let s = esercizi.estensioneInizio(57);           // La3
+  t.uguale('si comincia scendendo', s.verso, 'giu');
+  t.uguale('e la prima nota chiesta è quella di partenza', s.corrente, 57);
+  for (let i = 0; i < 5; i += 1) s = esercizi.estensionePasso(s, 'presa');
+  t.uguale('cinque note prese in giù (57, 56, 55, 54, 53) abbassano il grave a 53', s.grave, 53);
+  s = esercizi.estensionePasso(s, 'no');
+  t.uguale('il primo "non ci arrivo" gira in su', s.verso, 'su');
+  t.uguale('e riparte da sopra la nota di partenza, non da dove si era arrivati', s.corrente, 58);
+  for (let i = 0; i < 7; i += 1) s = esercizi.estensionePasso(s, 'presa');
+  t.uguale('sette note prese in su alzano l\'acuto', s.acuto, 64);
+  s = esercizi.estensionePasso(s, 'no');
+  t.ok('il secondo "non ci arrivo" chiude l\'esercizio', s.finito, JSON.stringify(s));
+  const r = esercizi.estensioneRiassunto(s);
+  t.uguale('il riassunto conta i semitoni giusti (53→64)', r.semitoni, 11);
+  t.ok('e la dichiara attendibile', r.attendibile, r.testo);
+  t.misura('esempio di esercizio completo', r.testo);
+
+  // ⚠️ Il caso trovato guidando l'app: «non ci arrivo» al primo colpo, due volte, e l'app
+  // salvava un'estensione di ZERO semitoni — poi usata per decidere ogni nota successiva.
+  // Un'app che ti fa cantare per sempre lo stesso La3, e per giunta convinta di sapere
+  // qualcosa di te.
+  let z = esercizi.estensioneInizio(57);
+  z = esercizi.estensionePasso(z, 'no');
+  z = esercizi.estensionePasso(z, 'no');
+  const rz = esercizi.estensioneRiassunto(z);
+  t.uguale('due rifiuti di fila chiudono l\'esercizio', z.finito, true);
+  t.ok('e il risultato viene dichiarato NON attendibile', !rz.attendibile, rz.testo);
+  t.ok('sotto la terza minore niente è attendibile',
+    !esercizi.estensioneRiassunto({ grave: 57, acuto: 59 }).attendibile
+    && esercizi.estensioneRiassunto({ grave: 57, acuto: 60 }).attendibile,
+    `soglia ${esercizi.ESTENSIONE_MINIMA} semitoni`);
+
+  // Il fondo della banda NON è «non ci arrivi»: è «qui non ti so misurare». Sono due frasi
+  // molto diverse per chi le riceve, e la seconda è l'unica vera.
+  let b = esercizi.estensioneInizio(MIDI_MIN + 1);
+  b = esercizi.estensionePasso(b, 'presa');
+  b = esercizi.estensionePasso(b, 'presa');
+  t.ok('arrivati al fondo della banda si cambia verso e si spiega perché',
+    b.verso === 'su' && /non ti so misurare/.test(b.motivoFine), b.motivoFine || '(nessun motivo dato)');
+  t.ok('e non si dice mai che non ci arrivi', !/non ci arrivi\b/.test(b.motivoFine.replace('non è che non ci arrivi', '')), b.motivoFine);
 });
 
 // ── esecuzione ───────────────────────────────────────────────────────────────
