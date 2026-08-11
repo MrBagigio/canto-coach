@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Canto Coach — collaudo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  body { background: #14100d; }
+  #esito { max-width: 900px; margin: 0 auto; padding: 20px 14px 60px; }
+  .gruppo { border: 1px solid var(--linea); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+  .gruppo > summary { padding: 12px 14px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .gruppo > summary::-webkit-details-marker { display: none; }
+  .gruppo.verde { background: rgba(111,207,151,.06); border-color: rgba(111,207,151,.35); }
+  .gruppo.rosso { background: rgba(226,114,91,.07); border-color: var(--rosso); }
+  .prova { display: flex; gap: 8px; padding: 5px 14px; font-size: .84rem; border-top: 1px solid var(--linea); }
+  .prova .segno { flex: 0 0 16px; }
+  .prova.no { color: #ffd7cf; }
+  .prova.no .segno { color: var(--rosso); }
+  .prova.si .segno { color: var(--verde); }
+  .prova.mis { background: rgba(255,255,255,.03); }
+  .prova.mis .segno { color: var(--dim); }
+  .prova .dett { color: var(--dim); }
+  #riassunto { font-size: 1.15rem; font-weight: 700; margin: 10px 0 18px; }
+  .solo-falliti .prova.si:not(.mis) { display: none; }
+</style>
+</head>
+<body>
+<div id="esito">
+  <h1>Collaudo — prove 0–4</h1>
+  <p class="dim piccolo">Le prove dell'AVVIO §4, nell'ordine del documento. Non usano il microfono:
+  la voce è sintetizzata con formanti, fondamentale attenuabile e vibrato, così l'errore si misura
+  in centesimi invece di stimarlo a orecchio. Le righe grigie sono MISURE, non giudizi: passano
+  sempre e servono a vedere i numeri prima che diventino un difetto in cuffia.</p>
+  <label class="opzione"><input type="checkbox" id="filtro" checked> <span>Mostra solo quello che non va (le misure restano)</span></label>
+  <div id="riassunto">Eseguo…</div>
+  <button id="rifai" class="bottone" type="button" style="display:none">Rifai le prove audio</button>
+  <div id="gruppi"></div>
+</div>
+<script type="module">
+  import { esegui } from './js/collaudo.js';
+
+  const contenitore = document.getElementById('gruppi');
+  const riassunto = document.getElementById('riassunto');
+  const filtro = document.getElementById('filtro');
+  const applica = () => contenitore.classList.toggle('solo-falliti', filtro.checked);
+  filtro.addEventListener('change', applica);
+  applica();
+
+  const disegna = (g, falliti) => {
+    const d = document.createElement('details');
+    d.className = `gruppo ${falliti ? 'rosso' : 'verde'}`;
+    d.open = true;
+    const s = document.createElement('summary');
+    s.innerHTML = `<strong>${g.nome}</strong><span>${falliti ? `${falliti} da sistemare` : `${g.prove.length} ok`}</span>`;
+    d.appendChild(s);
+    g.prove.forEach((p) => {
+      const r = document.createElement('div');
+      r.className = `prova ${p.esito ? 'si' : 'no'}${p.misura ? ' mis' : ''}`;
+      r.innerHTML = `<span class="segno">${p.misura ? '·' : (p.esito ? '✓' : '✕')}</span><span>${p.titolo}${p.dettaglio ? ` <span class="dett">— ${p.dettaglio}</span>` : ''}</span>`;
+      d.appendChild(r);
+    });
+    contenitore.appendChild(d);
+  };
+
+  const rifai = document.getElementById('rifai');
+
+  function gira() {
+    contenitore.replaceChildren();
+    riassunto.textContent = 'Eseguo…';
+    riassunto.style.color = '';
+    window.__collaudo = null;
+    return esegui(disegna).then(({ totali, falliti, gruppi }) => {
+      riassunto.textContent = falliti
+        ? `${falliti} prove fallite su ${totali}`
+        : `Tutte e ${totali} le prove passano`;
+      riassunto.style.color = falliti ? 'var(--rosso)' : 'var(--verde)';
+      const sospeso = [...document.querySelectorAll('.prova.no')]
+        .some((e) => e.textContent.includes('audio sospeso'));
+      rifai.style.display = sospeso ? 'block' : 'none';
+      window.__collaudo = { totali, falliti, audioSospeso: sospeso, gruppi };
+    });
+  }
+
+  rifai.addEventListener('click', gira);
+  gira();
+</script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Canto Coach — prova zero</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { color-scheme: dark; --dim:#a89e94; --linea:#332c26; --verde:#6fcf97; --rosso:#e2725b; --ambra:#e0a458; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#14100d; color:#f2ece5; font:16px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:22px 16px 80px; }
+  h1 { font-size:1.4rem; margin:0 0 6px; }
+  p.sotto { color:var(--dim); font-size:.9rem; margin:0 0 20px; }
+  button { width:100%; padding:16px; font-size:1.05rem; font-weight:600; border:0; border-radius:14px;
+    background:var(--ambra); color:#1a1410; margin:8px 0; }
+  button:disabled { opacity:.35; }
+  .passo { border:1px solid var(--linea); border-radius:14px; padding:14px; margin:10px 0; }
+  .passo.fatto { border-color:rgba(111,207,151,.45); background:rgba(111,207,151,.06); }
+  .passo h2 { font-size:1rem; margin:0 0 4px; }
+  .passo .aiuto { color:var(--dim); font-size:.86rem; margin:0 0 8px; }
+  .barra { height:14px; border-radius:7px; background:#241d18; overflow:hidden; position:relative; margin:10px 0 6px; }
+  .barra i { display:block; height:100%; background:var(--verde); width:0; transition:width .06s linear; }
+  .barra u { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--rosso); }
+  .num { font-variant-numeric:tabular-nums; font-size:1.6rem; font-weight:700; }
+  .num small { font-size:.8rem; font-weight:400; color:var(--dim); }
+  table { width:100%; border-collapse:collapse; font-size:.88rem; margin-top:8px; }
+  td, th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--linea); vertical-align:top; }
+  td:last-child, th:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+  .verdetto { padding:12px 14px; border-radius:12px; margin-top:14px; font-size:.92rem; }
+  .verdetto.si { background:rgba(111,207,151,.1); border:1px solid rgba(111,207,151,.4); }
+  .verdetto.no { background:rgba(226,114,91,.1); border:1px solid var(--rosso); }
+  .conta { font-size:2.6rem; font-weight:700; text-align:center; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Prova zero</h1>
+  <p class="sotto">Il banco di collaudo misura tutto tranne una cosa: quanto forte è <em>il tuo</em>
+  mugolato sul <em>tuo</em> telefono, nella <em>tua</em> stanza. Tutte le soglie dell'app dipendono da
+  quel numero, e finché non è misurato qui sono una supposizione. Tre minuti, niente si salva da nessuna parte.</p>
+
+  <button id="via">Comincia</button>
+
+  <div id="dove"></div>
+  <div id="riassunto"></div>
+</main>
+
+<script type="module">
+import { Rilevatore, centesimi, nota } from './js/pitch.js';
+import { scomponi } from './js/vibrato.js';
+
+const dbfs = (rms) => 20 * Math.log10(Math.max(rms, 1e-9));
+const dove = document.getElementById('dove');
+const riassunto = document.getElementById('riassunto');
+const via = document.getElementById('via');
+
+const PASSI = [
+  { id: 'stanza', titolo: 'La stanza, senza di te', aiuto: 'Stai zitto e fermo. Sto misurando il rumore di fondo.', secondi: 4, canta: false },
+  { id: 'piano', titolo: 'Mugola PIANO', aiuto: 'A bocca chiusa, il più piano che faresti stando sul divano senza svegliare nessuno. Una nota sola, tenuta.', secondi: 5, canta: true },
+  { id: 'normale', titolo: 'Mugola normale', aiuto: 'Sempre a bocca chiusa, al volume che ti verrebbe naturale.', secondi: 5, canta: true },
+  { id: 'vocale', titolo: 'Canta «a»', aiuto: 'Bocca aperta, una nota comoda tenuta ferma.', secondi: 5, canta: true },
+];
+
+const esiti = {};
+let ctx = null;
+let flusso = null;
+let rilevatore = null;
+let analizzatore = null;
+
+async function apriMicrofono() {
+  // I tre interruttori vanno SPENTI o la misura del livello non misura la voce, misura
+  // quello che il telefono ha deciso di farne. Il controllo automatico del guadagno in
+  // particolare alza il piano e abbassa il forte: renderebbe questa pagina inutile.
+  flusso = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  const sorgente = ctx.createMediaStreamSource(flusso);
+  analizzatore = ctx.createAnalyser();
+  analizzatore.fftSize = 4096;
+  analizzatore.smoothingTimeConstant = 0;
+  sorgente.connect(analizzatore);
+  rilevatore = new Rilevatore(analizzatore);
+  const t = flusso.getAudioTracks()[0];
+  const s = t.getSettings ? t.getSettings() : {};
+  return {
+    campionamento: ctx.sampleRate,
+    guadagnoAuto: s.autoGainControl,
+    soppressione: s.noiseSuppression,
+    eco: s.echoCancellation,
+    microfono: t.label || '(senza nome)',
+  };
+}
+
+function schedaPasso(p) {
+  const d = document.createElement('div');
+  d.className = 'passo';
+  d.innerHTML = `<h2>${p.titolo}</h2><p class="aiuto">${p.aiuto}</p>
+    <div class="conta">—</div>
+    <div class="barra"><i></i><u style="left:0"></u></div>
+    <div class="num">—</div>`;
+  dove.appendChild(d);
+  return {
+    nodo: d,
+    conta: d.querySelector('.conta'),
+    barra: d.querySelector('.barra i'),
+    tacca: d.querySelector('.barra u'),
+    num: d.querySelector('.num'),
+  };
+}
+
+/** Un passo: N secondi di lettura continua, raccogliendo tutto. */
+function esegui(p, ui) {
+  return new Promise((risolvi) => {
+    const letture = [];
+    const inizio = performance.now();
+    // Il pavimento del rilevatore si azzera all'inizio di ogni passo: la stanza di prima
+    // non è la stanza di adesso, e trascinarsi dietro la stima falserebbe la soglia.
+    rilevatore = new Rilevatore(analizzatore);
+    const giro = setInterval(() => {
+      const l = rilevatore.leggi();
+      const t = performance.now() - inizio;
+      letture.push({ t, rms: l.rms, hz: l.hz, chiarezza: l.chiarezza, soglia: l.soglia });
+      ui.barra.style.width = `${(l.livello * 100).toFixed(0)}%`;
+      ui.tacca.style.left = `${(Math.max(0, Math.min(1, (dbfs(l.soglia) + 60) / 48)) * 100).toFixed(0)}%`;
+      const restano = Math.max(0, p.secondi - t / 1000);
+      ui.conta.textContent = restano > 0.05 ? restano.toFixed(1) : '✓';
+      ui.num.innerHTML = l.hz
+        ? `${nota(l.hz).nome}${nota(l.hz).ottava} <small>${l.hz.toFixed(1)} Hz · ${dbfs(l.rms).toFixed(0)} dBFS</small>`
+        : `<small>${dbfs(l.rms).toFixed(0)} dBFS · ${l.silenzio ? 'sotto la soglia' : `chiarezza ${l.chiarezza.toFixed(2)}`}</small>`;
+      if (t >= p.secondi * 1000) {
+        clearInterval(giro);
+        ui.nodo.classList.add('fatto');
+        risolvi(letture);
+      }
+    }, 25);
+  });
+}
+
+function riassumi(p, letture) {
+  // Il primo mezzo secondo si butta: è il tempo che ci metti a cominciare.
+  const utili = letture.filter((l) => l.t > 500);
+  const rms = utili.map((l) => l.rms).sort((a, b) => a - b);
+  const mediana = rms[Math.floor(rms.length / 2)];
+  const conNota = utili.filter((l) => l.hz);
+  const out = {
+    id: p.id,
+    titolo: p.titolo,
+    dbfs: dbfs(mediana),
+    dbfsMin: dbfs(rms[0]),
+    dbfsMax: dbfs(rms[rms.length - 1]),
+    lette: conNota.length,
+    su: utili.length,
+    soglia: dbfs(utili[utili.length - 1].soglia),
+    chiarezza: Math.max(...utili.map((l) => l.chiarezza)),
+  };
+  if (conNota.length > 8) {
+    // L'altezza di riferimento è la mediana delle letture: quello che si vuole sapere non
+    // è QUALE nota hai cantato, ma quanto ferma l'ha vista il rilevatore.
+    const hzOrd = conNota.map((l) => l.hz).sort((a, b) => a - b);
+    const base = hzOrd[Math.floor(hzOrd.length / 2)];
+    const cent = conNota.map((l) => centesimi(l.hz, base));
+    const dt = (conNota[conNota.length - 1].t - conNota[0].t) / (conNota.length - 1);
+    const v = scomponi(cent, dt);
+    out.hz = base;
+    out.nota = `${nota(base).nome}${nota(base).ottava}`;
+    out.fermezza = v.fermezza;
+    out.vibratoHz = v.hz;
+    out.vibratoAmp = v.ampiezza;
+    out.deriva = v.deriva;
+  }
+  return out;
+}
+
+via.addEventListener('click', async () => {
+  via.disabled = true;
+  via.textContent = 'Apro il microfono…';
+  let info;
+  try {
+    info = await apriMicrofono();
+  } catch (e) {
+    via.textContent = 'Riprova';
+    via.disabled = false;
+    riassunto.innerHTML = `<div class="verdetto no">Il microfono non si è aperto: ${e.name || e}.
+      Su iPhone serve una pagina in <b>https</b> (o localhost) e il permesso va dato quando lo chiede.</div>`;
+    return;
+  }
+  via.style.display = 'none';
+  dove.replaceChildren();
+
+  for (const p of PASSI) {
+    const ui = schedaPasso(p);
+    ui.nodo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Un secondo per leggere la richiesta prima che cominci a contare.
+    await new Promise((r) => setTimeout(r, 1200));
+    esiti[p.id] = riassumi(p, await esegui(p, ui));
+  }
+
+  flusso.getTracks().forEach((t) => t.stop());
+  await ctx.close();
+
+  const s = esiti.stanza;
+  const riga = (e) => `<tr><td>${e.titolo}</td><td>${e.dbfs.toFixed(1)} dBFS${
+    e.nota ? `<br><span style="color:var(--dim)">${e.nota} · ${e.lette}/${e.su} letture · fermezza ${e.fermezza.toFixed(0)} cent${
+      e.vibratoHz ? ` · vibrato ${e.vibratoHz.toFixed(1)} Hz ±${e.vibratoAmp.toFixed(0)}` : ''}</span>` : ''}</td></tr>`;
+
+  const margine = (e) => e.dbfs - s.dbfs;
+  const piano = esiti.piano;
+  // La domanda per cui esiste questa pagina. Il rilevatore ha bisogno di circa 5 dB di
+  // voce sopra il rumore della stanza: sotto, non è una questione di soglie, è che nel
+  // segnale la voce non c'è abbastanza.
+  const ok = piano.lette >= piano.su * 0.5;
+  riassunto.innerHTML = `
+    <h2 style="font-size:1.1rem;margin:22px 0 0">I tuoi numeri</h2>
+    <table>
+      <tr><th>passo</th><th>livello</th></tr>
+      ${[esiti.stanza, esiti.piano, esiti.normale, esiti.vocale].map(riga).join('')}
+      <tr><td>il tuo mugolato piano, sopra la stanza</td><td>${margine(piano).toFixed(1)} dB</td></tr>
+      <tr><td>soglia dell'app in questa stanza</td><td>${piano.soglia.toFixed(1)} dBFS</td></tr>
+      <tr><td>campionamento · microfono</td><td>${info.campionamento} Hz<br><span style="color:var(--dim)">${info.microfono}</span></td></tr>
+      <tr><td>guadagno automatico · soppressione rumore</td><td>${info.guadagnoAuto === undefined ? 'non dichiarato' : (info.guadagnoAuto ? 'ACCESO ⚠️' : 'spento')} · ${info.soppressione === undefined ? 'non dichiarato' : (info.soppressione ? 'ACCESA ⚠️' : 'spenta')}</td></tr>
+    </table>
+    <div class="verdetto ${ok ? 'si' : 'no'}">
+      ${ok
+    ? `<b>L'app ti sente quando mugoli piano.</b> ${piano.lette} letture su ${piano.su} hanno dato un'altezza. Il tuo mugolato piano sta a ${piano.dbfs.toFixed(0)} dBFS, ${margine(piano).toFixed(0)} dB sopra il rumore della tua stanza.`
+    : `<b>Mugolando piano l'app NON ti sente</b> (${piano.lette} letture su ${piano.su}). Il tuo mugolato sta a ${piano.dbfs.toFixed(0)} dBFS e la stanza a ${s.dbfs.toFixed(0)}: ${margine(piano).toFixed(0)} dB di margine. Se il numero è sotto i 5 dB il rimedio non è abbassare una soglia — nel segnale la voce non c'è abbastanza: avvicina il telefono o cerca una stanza più zitta.`}
+    </div>
+    ${info.guadagnoAuto ? '<div class="verdetto no">Il guadagno automatico è rimasto ACCESO: il telefono ha alzato il piano e abbassato il forte da solo, quindi i livelli qui sopra non sono i tuoi. È un limite del dispositivo, non un errore della pagina.</div>' : ''}`;
+});
+</script>
+</body>
+</html>

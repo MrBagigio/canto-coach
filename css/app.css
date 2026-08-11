@@ -1,0 +1,1161 @@
+/* Ukulele Coach — foglio di stile unico, nessun font esterno.
+   Tema scuro caldo (l'ukulele è legno). Progettato sul 390×844 dell'iPhone 13 Pro:
+   niente hover come unico segnale, bersagli tattili da 44 px, aree sicure rispettate. */
+
+:root {
+  --sfondo: #14100d;
+  --sfondo2: #1b1612;
+  --scheda: #221b16;
+  --scheda2: #2b231c;
+  --linea: #3a2e25;
+  --testo: #f6efe7;
+  --dim: #a89685;
+  --ambra: #e8a33d;
+  --ambra-scura: #8a5f1d;
+  --verde: #6fcf97;
+  --rosso: #e2725b;
+  --turchese: #4fc3c7;
+  /* Un colore per dito. Le tinte sono distanti sulla ruota (≈40°, 183°, 275°, 345°)
+     perché due dita vicine di tinta si confondono proprio quando servono: mentre
+     guardi la mano e sbirci lo schermo con la coda dell'occhio.
+     Il numero resta SEMPRE dentro il pallino: il colore è un acceleratore, non
+     l'unico portatore dell'informazione — chi non distingue le tinte non deve
+     perdere niente. */
+  --dito-1: #e8a33d;   /* indice   */
+  --dito-2: #45c0c8;   /* medio    */
+  --dito-3: #b48bd8;   /* anulare  */
+  --dito-4: #e8798f;   /* mignolo  */
+  --dito-p: #cbb69d;   /* pollice (mano destra, negli arpeggi) */
+  --su-dito: #231a12;  /* il testo dentro il pallino */
+  --raggio: 16px;
+  --barra-h: 62px;
+  --ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Tema chiaro: stessa gerarchia, non un semplice inverso. I contrasti sono ricalcolati
+   perché l'ambra su fondo chiaro sparisce, e i diagrammi devono restare leggibili al sole. */
+/* `color-scheme` decide come il sistema disegna caselle, menù e cursori. Restando su
+   "dark" anche col tema chiaro, le caselle di spunta escono nere su fondo crema. */
+:root[data-tema="scuro"] { color-scheme: dark; }
+:root[data-tema="chiaro"] { color-scheme: light; }
+
+:root[data-tema="chiaro"] {
+  --sfondo: #f7f1e8;
+  --sfondo2: #efe6d9;
+  --scheda: #fffaf3;
+  --scheda2: #fdf6ec;
+  --linea: #ddcfbc;
+  --testo: #2a2119;
+  --dim: #7c6a58;
+  --ambra: #b7761a;
+  --ambra-scura: #d9a45c;
+  --verde: #2f8a5b;
+  --rosso: #bf4a34;
+  --turchese: #1f8a90;
+  /* Le stesse quattro tinte, scurite: su fondo crema quelle chiare sbiadiscono e il
+     numero dentro il pallino smette di leggersi. */
+  --dito-1: #c07f16;
+  --dito-2: #1b929a;
+  --dito-3: #8154bd;
+  --dito-4: #ca4762;
+  --dito-p: #9d8362;
+  --su-dito: #fff8ec;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--sfondo);
+  color: var(--testo);
+  font-family: var(--ui);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  min-height: 100dvh;
+  /* Sfumatura calda in alto: dà profondità senza immagini da scaricare. */
+  background-image: radial-gradient(120% 70% at 50% -10%, #2a1f16 0%, var(--sfondo) 55%);
+  background-attachment: fixed;
+}
+:root[data-tema="chiaro"] body {
+  background-image: radial-gradient(120% 70% at 50% -10%, #fff8ec 0%, var(--sfondo) 60%);
+}
+:root[data-tema="chiaro"] #tabbar { background: rgba(247, 241, 232, .93); }
+:root[data-tema="chiaro"] .d-capotasto,
+:root[data-tema="chiaro"] .m-capotasto { fill: #6b5540; }
+:root[data-tema="chiaro"] .d-tasto,
+:root[data-tema="chiaro"] .m-tasto { stroke: #b7a189; }
+:root[data-tema="chiaro"] .d-corda,
+:root[data-tema="chiaro"] .m-corda { stroke: #8e7660; }
+:root[data-tema="chiaro"] .d-dito,
+:root[data-tema="chiaro"] .m-nota text { fill: #fff8ec; }
+:root[data-tema="chiaro"] .d-vuota { stroke: #6b5540; }
+:root[data-tema="chiaro"] .d-muta { stroke: #6b5540; }
+:root[data-tema="chiaro"] .tn-tacche span,
+:root[data-tema="chiaro"] .tn-verso { color: #9a8571; }
+:root[data-tema="chiaro"] .bottone { color: #fff8ec; }
+:root[data-tema="chiaro"] .chip.attiva,
+:root[data-tema="chiaro"] .passo.corrente .passo-icona,
+:root[data-tema="chiaro"] .es-mappa .bat.attiva,
+:root[data-tema="chiaro"] .luce.accesa { color: #fff8ec; }
+:root[data-tema="chiaro"] .es-mappa .bat.attiva small,
+:root[data-tema="chiaro"] .es-mappa .bat.attiva strong { color: #fff8ec; }
+
+#contenuto {
+  max-width: 620px;
+  margin: 0 auto;
+  padding:
+    calc(env(safe-area-inset-top) + 14px)
+    calc(env(safe-area-inset-right) + 14px)
+    calc(env(safe-area-inset-bottom) + var(--barra-h) + 22px)
+    calc(env(safe-area-inset-left) + 14px);
+}
+
+h1 { font-size: 1.6rem; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.02em; }
+h2 { font-size: 1.12rem; margin: 0 0 8px; }
+h2.senza-margine { margin: 2px 0 4px; }
+.piccolo-titolo { font-size: 0.95rem; margin: 14px 0 6px; color: var(--dim); font-weight: 600; }
+p { margin: 0 0 10px; }
+p:last-child { margin-bottom: 0; }
+a { color: var(--ambra); text-decoration: none; }
+
+.dim { color: var(--dim); }
+.piccolo { font-size: 0.86rem; }
+.blocco { display: block; }
+.ok { color: var(--verde); }
+.errore { color: var(--rosso); }
+.nascosto { display: none !important; }
+
+.occhiello {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ambra);
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.testa-pagina { margin: 4px 0 16px; }
+.testa-riga { margin: 0 0 6px; }
+
+.indietro {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  color: var(--dim);
+  font-size: 0.92rem;
+}
+.indietro span { font-size: 1.3rem; line-height: 1; }
+
+/* ── schede ─────────────────────────────────────────────────────────────── */
+
+.scheda {
+  background: linear-gradient(180deg, var(--scheda2), var(--scheda));
+  border: 1px solid var(--linea);
+  border-radius: var(--raggio);
+  padding: 14px;
+  margin: 0 0 14px;
+}
+.scheda > * + * { margin-top: 10px; }
+
+.riga-tra { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.riga-campi { display: flex; gap: 10px; }
+.riga-campi > * { flex: 1; }
+
+/* ── comandi ────────────────────────────────────────────────────────────── */
+
+.bottone {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  padding: 13px 16px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--ambra);
+  color: #23180a;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottone.grande { min-height: 56px; font-size: 1.06rem; }
+.bottone.sottile {
+  background: transparent;
+  color: var(--testo);
+  border: 1px solid var(--linea);
+  font-weight: 600;
+}
+.bottone.pericolo { background: transparent; color: var(--rosso); border: 1px solid var(--rosso); }
+.bottone:disabled { opacity: 0.45; }
+.bottone:active { transform: scale(0.985); }
+.bottone.giusta { border-color: var(--verde); color: var(--verde); }
+.bottone.sbagliata { border-color: var(--rosso); color: var(--rosso); }
+
+.campo {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--linea);
+  background: var(--sfondo2);
+  color: var(--testo);
+  font: inherit;
+  font-size: 16px;         /* sotto i 16px iOS zooma da solo al focus */
+}
+select.campo { appearance: none; background-image: none; }
+
+.opzione {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 0.92rem;
+  color: var(--dim);
+}
+.opzione input { width: 22px; height: 22px; accent-color: var(--ambra); }
+
+.cursore { width: 100%; height: 44px; accent-color: var(--ambra); background: transparent; }
+
+.barra {
+  height: 8px;
+  background: var(--sfondo2);
+  border-radius: 99px;
+  overflow: hidden;
+  border: 1px solid var(--linea);
+}
+.barra > span { display: block; height: 100%; background: linear-gradient(90deg, var(--ambra-scura), var(--ambra)); transition: width 0.25s; }
+
+.avviso {
+  border-radius: 11px;
+  padding: 11px 12px;
+  font-size: 0.88rem;
+  border: 1px solid var(--linea);
+  background: var(--sfondo2);
+}
+.avviso.errore { border-color: var(--rosso); color: #ffd7cf; }
+.avviso.attenzione { border-color: var(--ambra-scura); color: #ffe6bd; }
+.avviso.neutro { color: var(--dim); }
+
+.consiglio {
+  border-left: 3px solid var(--ambra);
+  padding: 2px 0 2px 12px;
+  color: #f0e2cd;
+  font-size: 0.94rem;
+}
+
+.elenco { margin: 0; padding-left: 20px; }
+.elenco li { margin-bottom: 9px; }
+.elenco-magro { list-style: none; margin: 0; padding: 0; }
+.elenco-magro li { border-top: 1px solid var(--linea); }
+.elenco-magro li:first-child { border-top: 0; }
+.elenco-magro a { display: block; padding: 11px 0; min-height: 44px; }
+
+/* ── barra delle sezioni ────────────────────────────────────────────────── */
+
+#tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  background: rgba(20, 16, 13, 0.93);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--linea);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 20;
+}
+.tab {
+  flex: 1;
+  min-height: var(--barra-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--dim);
+  font-size: 0.6rem;          /* sei sezioni su 375 px: 62 px a testa, l'etichetta deve starci */
+  letter-spacing: 0;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tab.attivo { color: var(--ambra); }
+
+/* ── diagramma accordo ──────────────────────────────────────────────────── */
+
+.diagramma { width: 100%; height: auto; display: block; }
+.d-capotasto { fill: #e9dcc9; }
+.d-tasto { stroke: #6d5945; stroke-width: 1.6; }
+.d-corda { stroke: #8d7862; stroke-width: 1.5; }
+.d-punto { fill: var(--ambra); }
+.d-barre { fill: var(--ambra); opacity: 0.92; }
+.d-dito { fill: var(--su-dito); font: 700 11px var(--ui); text-anchor: middle; }
+
+/* Il colore compare SOLO dove si mostrano anche i numeri delle dita. Nelle miniature
+   degli elenchi i numeri non ci sono, e ottantacinque accordi a quattro colori
+   diventerebbero coriandoli: lì il pallino resta ambra. */
+.d-punto.dito-1, .d-barre.dito-1 { fill: var(--dito-1); }
+.d-punto.dito-2, .d-barre.dito-2 { fill: var(--dito-2); }
+.d-punto.dito-3, .d-barre.dito-3 { fill: var(--dito-3); }
+.d-punto.dito-4, .d-barre.dito-4 { fill: var(--dito-4); }
+
+.legenda-dita { display: flex; flex-wrap: wrap; gap: 7px; }
+.tacca-dito {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .76rem;
+  color: var(--dim);
+  border: 1px solid var(--linea);
+  border-radius: 99px;
+  padding: 3px 10px 3px 4px;
+}
+.tacca-dito i {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-weight: 800;
+  font-size: .72rem;
+  color: var(--su-dito);
+}
+.tacca-dito.d1 i { background: var(--dito-1); }
+.tacca-dito.d2 i { background: var(--dito-2); }
+.tacca-dito.d3 i { background: var(--dito-3); }
+.tacca-dito.d4 i { background: var(--dito-4); }
+.tacca-dito.dp i { background: var(--dito-p); }
+
+/* Le stesse tinte per la mano destra negli arpeggi: stesso dito, stesso colore.
+   i = indice come il dito 1, m = medio come il 2, a = anulare come il 3. */
+.cella.s-dito .cella-freccia.dito-p { color: var(--dito-p); }
+.cella.s-dito .cella-freccia.dito-i { color: var(--dito-1); }
+.cella.s-dito .cella-freccia.dito-m { color: var(--dito-2); }
+.cella.s-dito .cella-freccia.dito-a { color: var(--dito-3); }
+.cella.s-dito .cella-freccia.dito-misto {
+  background: linear-gradient(90deg, var(--dito-p), var(--dito-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nc .nc-dito { font-weight: 700; }
+.nc .nc-dito.dito-1 { color: var(--dito-1); }
+.nc .nc-dito.dito-2 { color: var(--dito-2); }
+.nc .nc-dito.dito-3 { color: var(--dito-3); }
+.nc .nc-dito.dito-4 { color: var(--dito-4); }
+.d-vuota { fill: none; stroke: #cbb69d; stroke-width: 1.8; }
+.d-muta { stroke: #9a8875; stroke-width: 2; stroke-linecap: round; }
+.d-corda-nome { fill: var(--dim); font: 600 10px var(--ui); text-anchor: middle; }
+.d-posizione { fill: var(--ambra); font: 700 11px var(--ui); }
+
+.scheda-accordo { text-align: center; }
+.sa-nome { font-weight: 800; font-size: 1.05rem; margin-bottom: 4px; }
+.sa-sub { color: var(--dim); font-size: 0.74rem; margin-top: 2px; }
+
+.accordo-grande { max-width: 210px; margin: 0 auto; }
+
+.note-corde { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.nc {
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 0.76rem;
+}
+.nc small { display: block; color: var(--ambra); font-weight: 700; font-size: 0.86rem; }
+.nc strong { display: block; font-size: 0.74rem; font-weight: 600; }
+/* Ogni informazione sulla sua riga: da inline la nota e il dito si attaccavano e
+   uscivano parole come "Solanulare". */
+.nc span { display: block; line-height: 1.35; }
+
+/* ── griglia libreria ───────────────────────────────────────────────────── */
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  border: 1px solid var(--linea);
+  background: var(--sfondo2);
+  color: var(--dim);
+  border-radius: 99px;
+  padding: 9px 13px;
+  min-height: 40px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.chip.attiva { background: var(--ambra); color: #23180a; border-color: var(--ambra); font-weight: 700; }
+
+.griglia-accordi {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cella-accordo {
+  background: var(--scheda);
+  border: 1px solid var(--linea);
+  border-radius: 13px;
+  padding: 9px 7px;
+  color: var(--testo);
+  text-align: center;
+}
+.ca-nome { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.ca-nome strong { font-size: 1rem; }
+.punti { color: var(--ambra-scura); font-size: 0.6rem; letter-spacing: 1px; }
+.cella-accordo small { display: block; margin-top: 3px; font-size: 0.66rem; }
+
+.fila-accordi { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.mini { flex: 0 0 84px; text-align: center; color: var(--testo); }
+.mini strong { font-size: 0.86rem; }
+
+.ritmo-inline { display: block; color: var(--ambra); letter-spacing: 3px; font-size: 0.95rem; }
+
+/* ── oggi ───────────────────────────────────────────────────────────────── */
+
+.oggi-riga { display: flex; align-items: center; gap: 16px; }
+.anello-box { flex: 0 0 96px; }
+.anello-wrap { position: relative; width: 96px; height: 96px; }
+.anello { width: 96px; height: 96px; transform: rotate(-90deg); }
+.an-sfondo { fill: none; stroke: var(--linea); stroke-width: 9; }
+.an-arco { fill: none; stroke: var(--ambra); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 0.4s; }
+.anello-testo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.anello-testo strong { font-size: 1.42rem; letter-spacing: -0.02em; }
+.anello-testo small { color: var(--dim); font-size: 0.66rem; }
+
+.oggi-numeri { display: grid; gap: 6px; flex: 1; }
+.oggi-numeri strong { font-size: 1.2rem; margin-right: 6px; }
+.oggi-numeri small { color: var(--dim); font-size: 0.8rem; }
+
+.griglia-scorciatoie { display: grid; gap: 9px; }
+.scorciatoia {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 13px;
+  background: var(--sfondo2);
+  color: var(--testo);
+}
+.sc-emoji { font-size: 1.4rem; }
+.scorciatoia strong { display: block; font-size: 0.95rem; }
+.scorciatoia small { display: block; font-size: 0.78rem; }
+
+/* ── percorso ───────────────────────────────────────────────────────────── */
+
+.livello {
+  background: var(--scheda);
+  border: 1px solid var(--linea);
+  border-radius: var(--raggio);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.livello > summary {
+  padding: 13px 14px;
+  cursor: pointer;
+  list-style: none;
+  min-height: 56px;
+}
+.livello > summary::-webkit-details-marker { display: none; }
+.liv-testa { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 9px; }
+.liv-testa strong { font-size: 0.99rem; }
+.liv-conta {
+  flex: 0 0 auto;
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  border-radius: 99px;
+  padding: 3px 9px;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.liv-conta.ok { color: var(--verde); border-color: var(--verde); }
+
+.passi { list-style: none; margin: 0; padding: 0 14px 8px; }
+.passo { border-top: 1px solid var(--linea); }
+.passo a { display: flex; align-items: center; gap: 11px; padding: 11px 0; min-height: 54px; color: var(--testo); }
+.passo-icona {
+  flex: 0 0 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+.passo.fatto .passo-icona { color: var(--verde); border-color: var(--verde); }
+.passo.fatto .passo-testo strong { color: var(--dim); }
+.passo.corrente .passo-icona { background: var(--ambra); border-color: var(--ambra); }
+.passo-testo { flex: 1; min-width: 0; }
+.passo-testo strong { display: block; font-size: 0.94rem; }
+.passo-testo small { display: block; font-size: 0.76rem; }
+.passo-freccia { color: var(--dim); font-size: 1.3rem; }
+
+/* ── esercizio ──────────────────────────────────────────────────────────── */
+
+.es-palco { display: grid; gap: 12px; }
+.es-palco.duetto, .es-duo { grid-template-columns: 1.35fr 1fr; align-items: start; gap: 12px; display: grid; }
+.es-accordo { position: relative; }
+.es-accordo.prossimo { opacity: 0.5; }
+.es-etichetta {
+  display: block;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  margin-bottom: 3px;
+  text-align: center;
+}
+.es-palco.ritmo { grid-template-columns: 110px 1fr; align-items: center; }
+.es-vuote {
+  border: 1px dashed var(--linea);
+  border-radius: 12px;
+  padding: 22px 8px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 0.82rem;
+}
+
+.es-griglia { display: grid; grid-auto-flow: column; gap: 5px; }
+.cella {
+  border: 1px solid var(--linea);
+  border-radius: 9px;
+  background: var(--sfondo2);
+  padding: 8px 2px 5px;
+  text-align: center;
+}
+.cella-freccia { display: block; font-size: 1.2rem; line-height: 1; color: var(--ambra); }
+.cella-conto { display: block; font-size: 0.66rem; color: var(--dim); margin-top: 3px; }
+.cella.s-pausa .cella-freccia { color: var(--linea); }
+.cella.s-chunk .cella-freccia { color: var(--rosso); }
+.cella.s-su .cella-freccia { color: var(--turchese); }
+
+.es-battiti { display: flex; gap: 5px; margin-top: 12px; }
+.luce {
+  flex: 1;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  color: var(--dim);
+}
+.luce.forte { border-color: #4b3b2c; }
+.luce.accesa { background: var(--ambra); color: #23180a; border-color: var(--ambra); font-weight: 700; }
+
+.es-riga-conta { display: flex; justify-content: space-between; align-items: baseline; }
+.es-conta { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+.es-bpm { color: var(--ambra); font-size: 1.05rem; }
+.es-comandi { margin-top: 4px; }
+.es-giudizio p { font-size: 0.9rem; color: var(--dim); }
+.es-scelte { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.es-scelte .bottone { width: auto; }
+
+.es-mappa {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.es-mappa .bat {
+  flex: 0 0 62px;
+  scroll-snap-align: center;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--sfondo2);
+  padding: 7px 3px;
+  text-align: center;
+}
+.es-mappa .bat small { display: block; font-size: 0.6rem; color: var(--dim); }
+.es-mappa .bat strong { font-size: 0.92rem; }
+.es-mappa .bat.attiva { background: var(--ambra); border-color: var(--ambra); }
+.es-mappa .bat.attiva small, .es-mappa .bat.attiva strong { color: #23180a; }
+.es-mappa.statica, .es-griglia.statica { opacity: 0.92; }
+
+.anteprima-accordi { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.ap { flex: 0 0 96px; text-align: center; }
+.ap strong { display: block; font-size: 0.92rem; margin-bottom: 3px; }
+
+.contatore {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.contatore.ok { color: var(--verde); }
+
+.quiz-opzioni { display: grid; gap: 8px; }
+
+/* ── accordatore ────────────────────────────────────────────────────────── */
+
+.tn-misuratore { text-align: center; }
+/* Grande davvero: l'accordatore si guarda da mezzo metro, con lo strumento in mano
+   e le dita occupate. Se devi avvicinare la faccia allo schermo, non serve a niente. */
+.tn-nota { font-size: 4.6rem; font-weight: 800; line-height: 1; letter-spacing: -0.035em; }
+.tn-nota-it { color: var(--dim); font-size: 0.86rem; margin-top: 6px; min-height: 1.2em; }
+.tn-hz, .tn-cent { color: var(--dim); font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.tn-riga { display: flex; justify-content: space-between; margin-top: 8px; }
+
+/* Livello del microfono.
+   Sta SOTTO il quadrante e non sopra: mentre accordi guardi le mani, e l'occhio di lato
+   deve cogliere prima la nota e la lancetta. Questa è la risposta a una domanda che ti
+   fai solo quando l'app tace, quindi può stare in fondo — ma deve esserci. */
+.tn-livello { margin-top: 12px; transition: opacity .2s; }
+.tn-livello.spento { opacity: .35; }
+.tn-livello-pista {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dim) 26%, transparent);
+  overflow: hidden;
+}
+.tn-livello-barra {
+  position: absolute; inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 999px;
+  background: var(--verde);
+  transition: width .08s linear, background-color .2s;
+}
+/* La tacca della soglia: è il confine fra "l'app sta misurando" e "l'app tace".
+   Si muove con la stanza, perché la soglia si adatta al rumore. */
+.tn-livello-soglia {
+  position: absolute; top: -3px; bottom: -3px;
+  width: 2px;
+  background: var(--testo);
+  opacity: .55;
+  transition: left .3s;
+}
+.tn-livello-testo {
+  color: var(--dim);
+  font-size: 0.78rem;
+  margin-top: 6px;
+  min-height: 1.1em;
+}
+.tn-livello.scarso .tn-livello-barra { background: var(--dim); }
+.tn-livello.scarso .tn-livello-testo { color: var(--ambra); }
+.tn-livello.forte .tn-livello-barra { background: var(--ambra); }
+
+.tn-quadrante {
+  position: relative;
+  height: 108px;
+  margin: 18px 0 6px;
+  border-radius: 12px;
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  overflow: hidden;
+}
+.tn-zona {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 0; bottom: 0;
+  width: 9.6%;                      /* ±5 centesimi su una scala ±50 */
+  background: rgba(111, 207, 151, 0.14);
+  border-left: 1px solid rgba(111, 207, 151, 0.35);
+  border-right: 1px solid rgba(111, 207, 151, 0.35);
+}
+.tn-tacche { position: absolute; inset: auto 6px 5px; display: flex; justify-content: space-between; }
+.tn-tacche span { font-size: 0.6rem; color: #6b5947; }
+.tn-lancetta {
+  position: absolute;
+  top: 8px; bottom: 20px;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 3px;
+  background: var(--ambra);
+  box-shadow: 0 0 14px rgba(232, 163, 61, 0.5);
+}
+.tn-lancetta.fuori { background: var(--rosso); box-shadow: none; }
+.tn-quadrante.ok { border-color: var(--verde); background: rgba(111, 207, 151, 0.08); }
+.tn-quadrante.ok .tn-lancetta { background: var(--verde); box-shadow: 0 0 18px rgba(111, 207, 151, 0.55); }
+
+/* L'istruzione grande. Mentre accordi guardi le mani: quello che deve arrivare
+   con la coda dell'occhio è una parola e un colore, non una freccina. */
+.tn-azione {
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  line-height: 1.1;
+  min-height: 1.15em;
+  margin: 10px 0 2px;
+}
+/* A riposo l'istruzione non c'è: se tenesse lo spazio, sotto il quadrante resterebbe
+   un buco di quaranta pixel che sembra un pezzo mancante. */
+.tn-azione:empty { min-height: 0; margin: 0; }
+.tn-azione.tira { color: var(--turchese); }
+.tn-azione.allenta { color: var(--ambra); }
+.tn-azione.quasi { opacity: .78; font-size: 1.7rem; }
+.tn-azione.ok { color: var(--verde); }
+
+.tn-verso { display: flex; justify-content: space-between; font-size: 0.86rem; color: #7b6752; }
+.tn-freccia.acceso { color: var(--testo); font-weight: 700; }
+
+.tn-quadrante.vicino { border-color: var(--ambra); }
+.tn-quadrante.lontano { border-color: var(--rosso); }
+.tn-quadrante.lontano .tn-lancetta { background: var(--rosso); box-shadow: none; }
+
+/* Tenuta: la misura è ferma, e si vede che è ferma. Dare per viva una lettura di
+   tre secondi fa è peggio che non darla. */
+.tn-misuratore.tenuta .tn-nota,
+.tn-misuratore.tenuta .tn-azione,
+.tn-misuratore.tenuta .tn-quadrante { opacity: .52; }
+.tn-misuratore.tenuta .tn-nota-it { color: var(--ambra); }
+
+.tn-modo {
+  font-size: .8rem;
+  color: var(--dim);
+  margin-top: 12px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  border: 1px dashed var(--linea);
+}
+.tn-modo.manuale { color: var(--ambra); border-color: var(--ambra); border-style: solid; }
+
+.tn-corde { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.tn-corda {
+  border-radius: 12px;
+  border: 1px solid var(--linea);
+  background: var(--sfondo2);
+  color: var(--testo);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.tn-corda-scegli {
+  flex: 1;
+  min-height: 68px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tn-corda-suona {
+  min-height: 34px;
+  border: 0;
+  border-top: 1px solid var(--linea);
+  background: rgba(232, 163, 61, .1);
+  color: var(--ambra);
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tn-corda-suona:active { background: rgba(232, 163, 61, .28); }
+.tn-corda strong { font-size: 1.14rem; }
+.tn-corda small { color: var(--dim); font-size: 0.64rem; }
+.tn-spunta { color: var(--verde); font-size: 0.86rem; min-height: 1em; }
+.tn-corda.scelta {
+  border-color: var(--ambra);
+  box-shadow: 0 0 0 2px var(--ambra);
+  background: rgba(232, 163, 61, .12);
+}
+.tn-corda.ok { border-color: var(--verde); background: rgba(111, 207, 151, 0.09); }
+/* Già accordata in questa sessione, ma adesso è scesa: non è come non averla mai fatta. */
+.tn-corda.gia { border-color: rgba(111, 207, 151, .4); }
+.tn-corda.gia .tn-spunta { color: rgba(111, 207, 151, .55); }
+
+/* ── frecce avanti/indietro ─────────────────────────────────────────────── */
+
+.frecce {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.freccia {
+  flex: 1;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  background: var(--sfondo2);
+  color: var(--testo);
+  font-size: .84rem;
+  min-width: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Il segno sta sempre dalla parte in cui si va: a sinistra per il precedente,
+   a destra per il successivo. Al centro sarebbe una freccia che indica sé stessa. */
+.freccia:last-child { flex-direction: row-reverse; justify-content: flex-start; text-align: right; }
+.freccia:active { background: var(--scheda2); }
+.freccia.vuota { border-color: transparent; background: transparent; }
+.fr-segno { color: var(--ambra); font-size: 1.35rem; line-height: 1; flex: 0 0 auto; }
+.fr-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-contesto {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: .72rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tn-corda.ok.scelta { box-shadow: 0 0 0 2px var(--ambra); }
+
+/* Mentre l'app suona la nota giusta non sta misurando: si vede che è in pausa. */
+.tn-misuratore.riferimento .tn-quadrante,
+.tn-misuratore.riferimento .tn-azione { opacity: .3; }
+.tn-misuratore.riferimento .tn-nota-it { color: var(--turchese); }
+
+/* ── ascolto dell'accordo ───────────────────────────────────────────────── */
+
+.note-corde.ascolto .nc { transition: background .18s, border-color .18s; }
+.nc.stato-ok { border-color: var(--verde); background: rgba(111, 207, 151, .12); }
+.nc.stato-no { border-color: var(--rosso); background: rgba(226, 114, 91, .12); }
+.nc.non-giudicabile { opacity: .5; }
+.nc-esito { font-size: 1.1rem !important; }
+.nc.stato-ok .nc-esito { color: var(--verde); }
+.nc.stato-no .nc-esito { color: var(--rosso); }
+
+.verdetto { font-size: .95rem; min-height: 2.6em; }
+.verdetto.ok { color: var(--verde); }
+.verdetto.errore { color: #ffcabf; }
+
+.barra-livello {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  overflow: hidden;
+}
+.barra-livello > span { display: block; height: 100%; width: 0; background: var(--turchese); transition: width .06s linear; }
+
+.classifica { display: grid; gap: 8px; }
+.cl-riga {
+  display: grid;
+  grid-template-columns: 62px 1fr 38px 56px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--linea);
+  border-radius: 11px;
+  background: var(--sfondo2);
+}
+.cl-riga.primo { border-color: var(--ambra); }
+.cl-riga strong { font-size: 1rem; }
+.cl-barra { height: 8px; border-radius: 99px; background: var(--sfondo); overflow: hidden; }
+.cl-barra > span { display: block; height: 100%; background: var(--ambra); }
+.cl-riga .diagramma { width: 56px; }
+
+.chroma { display: flex; align-items: flex-end; gap: 3px; height: 78px; margin-top: 10px; }
+.ch-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.ch-barra { display: block; width: 100%; background: var(--turchese); border-radius: 3px 3px 0 0; min-height: 2px; }
+.ch-col small { font-size: .56rem; color: var(--dim); margin-top: 3px; }
+
+.rivelato { margin-top: 10px; }
+.accordo-medio { max-width: 150px; margin: 0 auto 8px; }
+
+/* ── manico ─────────────────────────────────────────────────────────────── */
+
+.manico-box { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+.manico { width: 100%; height: auto; display: block; }
+.m-capotasto { fill: #e9dcc9; }
+.m-tasto { stroke: #6d5945; stroke-width: 1.4; }
+.m-corda { stroke: #8d7862; stroke-width: 1.2; }
+.m-segno { fill: #4b3b2c; }
+.m-etichetta { fill: var(--ambra); font: 700 12px var(--ui); text-anchor: middle; }
+.m-numero { fill: var(--dim); font: 500 9px var(--ui); text-anchor: middle; }
+.m-nota circle { fill: var(--ambra-scura); }
+.m-nota text { fill: #2a1c08; font: 700 10px var(--ui); text-anchor: middle; }
+.m-nota.radice circle { fill: var(--ambra); }
+
+.fila-gradi { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; }
+.grado {
+  flex: 0 0 auto;
+  min-width: 58px;
+  text-align: center;
+  padding: 7px 8px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--sfondo2);
+  color: var(--testo);
+}
+.grado small { display: block; color: var(--ambra); font-size: .68rem; font-weight: 700; }
+.grado.assente { opacity: .45; }
+.bottone-grado { font: inherit; cursor: pointer; min-height: 56px; -webkit-tap-highlight-color: transparent; }
+.bottone-grado:active { transform: scale(.96); }
+.bottone-grado:disabled { cursor: default; }
+.bat.cliccabile { cursor: pointer; }
+.bat.cliccabile:active { opacity: .5; }
+.mini.posizione { flex: 0 0 104px; }
+.mini.posizione strong { font-size: .72rem; color: var(--ambra); display: block; }
+.mini.posizione small { display: block; font-size: .62rem; }
+
+/* ── esercizio: aggiunte ────────────────────────────────────────────────── */
+
+.es-opzioni { display: grid; gap: 2px; }
+.es-duetto-bottoni { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; align-items: stretch; }
+.es-duetto-bottoni .bottone { margin: 0; }
+.bottone.stretto { width: auto; min-width: 62px; padding: 10px 14px; min-height: 44px; }
+.cella-corde { display: block; font-size: .58rem; color: var(--turchese); margin-top: 1px; }
+.cella.s-dito .cella-freccia { color: var(--turchese); font-size: 1rem; font-weight: 800; }
+.es-palco.ritmo.arpeggio { grid-template-columns: 96px 1fr; }
+.es-mancante { text-align: center; font-size: 1.3rem; font-weight: 800; padding: 22px 0; }
+
+/* ── statistiche ────────────────────────────────────────────────────────── */
+
+.grafico { display: flex; align-items: flex-end; gap: 4px; height: 74px; }
+.gr-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 3px; }
+.gr-barra { display: block; width: 100%; border-radius: 3px 3px 0 0; background: var(--ambra-scura); min-height: 2px; }
+.gr-col.oggi .gr-barra { background: var(--ambra); }
+.gr-col small { font-size: .55rem; color: var(--dim); }
+
+/* ── icone: un set solo, un tratto solo ─────────────────────────────────── */
+
+.icona {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icona .piena { fill: currentColor; stroke: none; }
+
+.sc-icona {
+  flex: 0 0 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: rgba(232, 163, 61, .12);
+  border: 1px solid rgba(232, 163, 61, .28);
+  color: var(--ambra);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.passo-icona .icona { width: 17px; height: 17px; }
+.passo.fatto .passo-icona .icona { stroke-width: 2.2; }
+.bottone .icona { width: 19px; height: 19px; vertical-align: -4px; margin-right: 7px; }
+
+/* ── menù a tendina: devono sembrare menù ───────────────────────────────── */
+
+select.campo {
+  padding-right: 38px;
+  /* La freccia è disegnata qui perché `appearance: none` toglie anche quella del sistema:
+     un menù che sembra una casella di testo non si tocca, e resta lì a fare niente. */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 20px) calc(50% + 2px), calc(100% - 14px) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+/* ── esercizio: i diagrammi non devono mangiarsi lo schermo ─────────────── */
+
+.es-accordo .scheda-accordo { max-width: 138px; margin: 0 auto; }
+.es-palco.duetto .es-accordo.prossimo .scheda-accordo { max-width: 108px; }
+.es-palco.ritmo .scheda-accordo { max-width: 104px; }
+.es-duo .es-accordo .scheda-accordo { max-width: 124px; }
+
+.tag-variante {
+  font-size: .58rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: rgba(232, 163, 61, .16);
+  color: var(--ambra);
+  font-weight: 700;
+}
+
+/* ── accordatore: è una schermata sola, deve riempirla ──────────────────── */
+
+body[data-vista="accorda"] .tn-misuratore { padding: 8px 0 4px; }
+.tn-nota.vuota { font-size: 1.9rem; color: var(--dim); font-weight: 700; letter-spacing: -0.01em; }
+.tn-quadrante.spento { opacity: .55; }
+.tn-quadrante.spento .tn-lancetta { background: #6b5947; box-shadow: none; }
+.tn-zero {
+  position: absolute;
+  top: 6px;
+  bottom: 18px;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: rgba(246, 239, 231, .28);
+}
+
+/* ── ascolto vivo: la spia del tempo ────────────────────────────────────── */
+
+.spia-tempo {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--linea);
+  background: var(--sfondo2);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 48px;
+}
+.spia-scarto { font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 76px; }
+.spia-parola { font-size: .82rem; color: var(--dim); flex: 1; }
+.spia-accordo { font-size: 1.1rem; font-weight: 800; min-width: 1em; text-align: right; }
+.spia-accordo.ok { color: var(--verde); }
+.spia-accordo.no { color: var(--rosso); }
+.spia-tempo.preciso { border-color: var(--verde); }
+.spia-tempo.preciso .spia-scarto { color: var(--verde); }
+.spia-tempo.quasi { border-color: var(--ambra); }
+.spia-tempo.quasi .spia-scarto { color: var(--ambra); }
+.spia-tempo.fuori { border-color: var(--rosso); }
+.spia-tempo.fuori .spia-scarto { color: var(--rosso); }
+.spia-tempo.lampo { animation: battito .22s ease-out; }
+
+@keyframes battito {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.022); }
+  100% { transform: scale(1); }
+}
+
+.misure { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 9px; }
+.misura {
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  background: var(--sfondo2);
+  padding: 10px 8px;
+  text-align: center;
+}
+.misura strong { display: block; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em; }
+.misura small { display: block; color: var(--dim); font-size: .68rem; line-height: 1.25; margin-top: 3px; }
+.misura.ok { border-color: var(--verde); }
+.misura.ok strong { color: var(--verde); }
+.misura.quasi strong { color: var(--ambra); }
+.misura.no { border-color: var(--rosso); }
+.misura.no strong { color: var(--rosso); }
+
+.istogramma { display: flex; gap: 3px; align-items: flex-end; height: 34px; }
+.bat-barra { flex: 1; border-radius: 3px; background: var(--linea); height: 40%; }
+.bat-barra.ok { background: var(--verde); height: 100%; }
+.bat-barra.quasi { background: var(--ambra); height: 72%; }
+.bat-barra.no { background: var(--rosso); height: 52%; }
+.bat-barra.vuota { background: var(--linea); height: 18%; }
+
+/* ── ripasso ────────────────────────────────────────────────────────────── */
+
+.pastiglia {
+  background: var(--ambra);
+  color: #23180a;
+  border-radius: 99px;
+  padding: 2px 10px;
+  font-weight: 800;
+  font-size: .82rem;
+}
+.fila-ripasso { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-ripasso {
+  border: 1px solid var(--linea);
+  background: var(--sfondo2);
+  border-radius: 99px;
+  padding: 5px 11px;
+  font-size: .84rem;
+}
+.chip-ripasso.scaduto { border-color: var(--ambra); color: var(--ambra); }
+
+/* ── spartiti tuoi ──────────────────────────────────────────────────────── */
+
+.area-spartito {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 170px;
+  resize: vertical;
+}
+.riga-mio { display: flex; align-items: center; gap: 10px; }
+.riga-mio > a { flex: 1; }
+.riga-brano { display: flex; align-items: center; gap: 10px; }
+.riga-brano > a:first-child { flex: 1; }
+.riga-brano .bottone { flex: 0 0 auto; font-size: .74rem; padding: 8px 11px; min-height: 40px; }
+.es-mappa .bat.passata { opacity: .45; }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .88em;
+  background: var(--sfondo2);
+  border: 1px solid var(--linea);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+/* ── marchio e illustrazione ────────────────────────────────────────────── */
+
+.marchio { height: 34px; width: auto; display: block; margin-bottom: 10px; }
+.mar-corpo { fill: none; stroke: var(--ambra); stroke-width: 2.2; }
+.mar-buca { fill: var(--ambra); opacity: .55; }
+.mar-nome { fill: var(--testo); font: 800 23px var(--ui); letter-spacing: -.02em; }
+.mar-sotto { fill: var(--ambra); font: 700 10px var(--ui); letter-spacing: .34em; }
+
+.benvenuto-testa { display: flex; justify-content: center; padding: 4px 0 10px; }
+.illustrazione { display: block; height: auto; }
+.ill-cassa { fill: none; stroke: var(--ambra); stroke-width: 3; stroke-linejoin: round; }
+.ill-buca { fill: var(--ambra); opacity: .22; stroke: var(--ambra); stroke-width: 1.6; }
+.ill-ponte { fill: var(--ambra); opacity: .8; }
+.ill-manico { fill: none; stroke: var(--ambra); stroke-width: 2.4; }
+.ill-paletta { fill: none; stroke: var(--ambra); stroke-width: 2.4; }
+.ill-tasto { stroke: var(--ambra); stroke-width: 1.4; opacity: .55; }
+.ill-chiave { fill: var(--ambra); opacity: .75; }
+.ill-corda { stroke: var(--testo); stroke-width: 1; opacity: .55; }
+.illustrazione.vibra .ill-corda {
+  transform-origin: center;
+  animation: corda 2.6s ease-in-out infinite;
+  animation-delay: var(--ritardo, 0s);
+}
+@keyframes corda {
+  0%, 62%, 100% { opacity: .55; stroke-width: 1; }
+  66% { opacity: 1; stroke-width: 2.1; }
+  78% { opacity: .8; stroke-width: 1.3; }
+}
+
+/* ── micro-animazioni: solo dove dicono qualcosa ────────────────────────── */
+
+.scheda { animation: entra .26s ease-out both; }
+@keyframes entra {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.nc.stato-ok, .nc.stato-no { animation: battito .3s ease-out; }
+h2.ok { animation: battito .34s ease-out; }
+.luce.accesa { transition: background .04s linear, color .04s linear; }
+.an-arco { transition: stroke-dashoffset .6s cubic-bezier(.2, .8, .3, 1); }
+
+/* ── schermi grandi: due colonne dove serve ─────────────────────────────── */
+
+@media (min-width: 560px) {
+  .griglia-scorciatoie { grid-template-columns: 1fr 1fr; }
+  h1 { font-size: 1.85rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
