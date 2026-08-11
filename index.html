@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Canto Coach</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14100d">
+<style>
+  :root { color-scheme: dark; --dim:#a89e94; --linea:#332c26; --verde:#6fcf97; --ambra:#e0a458; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#14100d; color:#f2ece5; font:16px/1.55 -apple-system, system-ui, sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:28px 18px 70px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  .occhiello { color:var(--ambra); font-size:.8rem; letter-spacing:.09em; text-transform:uppercase; margin:0 0 6px; }
+  p { margin:0 0 14px; }
+  p.dim { color:var(--dim); font-size:.92rem; }
+  a.carta { display:block; text-decoration:none; color:inherit; border:1px solid var(--linea);
+    border-radius:16px; padding:16px 18px; margin:12px 0; }
+  a.carta.primo { border-color:var(--ambra); background:rgba(224,164,88,.08); }
+  a.carta b { display:block; font-size:1.08rem; margin-bottom:3px; }
+  a.carta span { color:var(--dim); font-size:.88rem; }
+  h2 { font-size:1.05rem; margin:30px 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:.88rem; }
+  td { padding:7px 2px; border-bottom:1px solid var(--linea); vertical-align:top; }
+  td:last-child { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; padding-left:10px; }
+  .stato { display:inline-block; padding:3px 9px; border-radius:99px; font-size:.76rem;
+    background:rgba(111,207,151,.14); color:var(--verde); border:1px solid rgba(111,207,151,.4); }
+  footer { margin-top:34px; color:var(--dim); font-size:.82rem; }
+</style>
+</head>
+<body>
+<main>
+  <p class="occhiello">Canto Coach</p>
+  <h1>Studiare canto dal telefono</h1>
+  <p class="dim">Niente account, niente server, niente rete: gira tutto dentro il telefono.
+  Indipendente dallo strumento — voce e strumento <b>si alternano e non suonano mai insieme</b>,
+  che è come si insegna canto da sempre e anche l'unico modo per cui la misura è onesta.</p>
+
+  <p><span class="stato">motore collaudato · esercizi non ancora scritti</span></p>
+
+  <a class="carta primo" href="prova-zero.html">
+    <b>Prova zero →</b>
+    <span>Da fare per prima, sul telefono, in tre minuti. Misura il rumore della tua stanza e
+    quanto forte è il tuo mugolato: è l'unico numero che il banco non può sapere, e tutte le
+    soglie dell'app dipendono da quello. Serve il microfono.</span>
+  </a>
+
+  <a class="carta" href="collaudo.html">
+    <b>Collaudo →</b>
+    <span>176 prove sul motore di riconoscimento dell'altezza, su voci sintetiche con
+    formanti, jitter, soffio e vibrato. Non usa il microfono: il verdetto non deve dipendere
+    dalla stanza in cui sei. Ci mette una quarantina di secondi.</span>
+  </a>
+
+  <h2>Cosa è già misurato</h2>
+  <table>
+    <tr><td>errore su nota tenuta (mediano · peggiore)</td><td>3,2 · 7,5 cent</td></tr>
+    <tr><td>errori d'ottava su voce grave, fondamentale fino a −18 dB</td><td>0 su 8</td></tr>
+    <tr><td>mugolato più piano riconosciuto, in cameretta</td><td>−60 dBFS</td></tr>
+    <tr><td>vibrato: frequenza e ampiezza lette (vere 5,5 Hz ±50)</td><td>5,51 Hz ±44,9</td></tr>
+    <tr><td>nota suonata: chitarra e ukulele</td><td>entro 1,4 cent</td></tr>
+    <tr><td>nota suonata: pianoforte sotto i 150 Hz</td><td>fino a +24,6 cent</td></tr>
+  </table>
+  <p class="dim" style="margin-top:12px">L'ultima riga è un limite dichiarato, non un difetto
+  nascosto: le corde gravi del pianoforte sono rigide e l'altezza che ne esce è un compromesso
+  fra le parziali stirate. La nota resta giusta, ma il bersaglio da cantare si prende dal
+  semitono temperato, non dalla frequenza letta.</p>
+
+  <h2>Cosa non c'è ancora</h2>
+  <p class="dim">Gli esercizi: nota tenuta, estensione, passaggio di registro, attacco,
+  intervalli, fiato, agilità, orecchio. Prima i numeri, poi le schermate — e i numeri hanno
+  già trovato due difetti veri nel motore e smentito uno dei sospetti di partenza.</p>
+
+  <footer>
+    Quello che questa app <b>non</b> misura, e non fingerà di misurare: l'appoggio del fiato,
+    la risonanza, se hai una bella voce. Servono orecchie umane. E se cantando ti fa male
+    qualcosa si smette e si va da un umano vero.
+  </footer>
+</main>
+</body>
+</html>
