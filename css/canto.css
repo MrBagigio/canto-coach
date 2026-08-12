@@ -68,8 +68,9 @@ button.secondario {
 .lettura.dentro { color: var(--verde); }
 .lettura.fuori { color: var(--ambra); }
 .lettura.dim { color: var(--dim); font-size: 1rem; font-weight: 400; }
-.livello { height: 8px; border-radius: 4px; background: #241d18; overflow: hidden; }
+.livello { height: 8px; border-radius: 4px; background: #241d18; overflow: hidden; position: relative; }
 .livello i { display: block; height: 100%; width: 0; background: var(--dim); transition: width .06s linear; }
+.livello u { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--rosso); opacity: .7; }
 
 .stato { text-align: center; font-size: 1rem; min-height: 1.5em; color: var(--dim); margin: 4px 0; }
 .stato.ascolta { color: var(--ambra); }

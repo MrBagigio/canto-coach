@@ -27,8 +27,23 @@ const SILENZIO_MS = 120;      // margine dopo la coda, prima di dichiarare che s
 let ctx = null;
 let bus = null;
 let onda = null;
+/** Tutto quello che sta suonando adesso: serve per poterlo zittire di colpo. */
+const vive = new Set();
+/** Cresce a ogni `zittisci()`: le sequenze in corso se ne accorgono e non proseguono. */
+let generazione = 0;
 
-/** Il contesto audio, uno solo per tutta l'app. */
+/**
+ * Il contesto audio, UNO SOLO per tutta l'app — uscita E microfono.
+ *
+ * Non è una pulizia estetica. La prima stesura ne aveva due (uno qui per suonare, uno in
+ * ascolto.js per il microfono) e su iPhone è la ricetta del muto: Safari tiene sospeso
+ * ogni contesto finché non viene ripreso DENTRO un gesto dell'utente, e quello del
+ * microfono nasceva al montaggio della schermata, dove un gesto non c'è. Risultato:
+ * analizzatore che legge zeri, app che non dà la nota e non sente, nessun errore da
+ * nessuna parte. Un contesto solo si sblocca una volta — al primo tocco — e vale per
+ * tutt'e due le direzioni; per giunta iOS mette la sessione in play-and-record una volta
+ * sola invece di negoziare fra due contesti.
+ */
 export function contesto() {
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -83,19 +98,46 @@ export function daiLaNota(frequenza, { durataMs = 1600, volume = 0.22 } = {}) {
   o.start(t0);
   o.stop(tFine + CODA_MS / 1000 + 0.02);
   return new Promise((risolvi) => {
-    o.onended = () => { g.disconnect(); risolvi(); };
+    let fatto = false;
+    const fine = () => {
+      if (fatto) return;
+      fatto = true;
+      vive.delete(spegni);
+      try { g.disconnect(); } catch { /* già staccato */ }
+      risolvi();
+    };
+    // Registrata fra le note vive: `zittisci()` la può fermare di colpo — chi naviga via
+    // durante una scala non deve sentirsi le altre otto note da un'altra schermata.
+    const spegni = () => { try { o.stop(); } catch { /* mai partita */ } fine(); };
+    vive.add(spegni);
+    o.onended = fine;
     // Rete di sicurezza: `onended` non arriva se la scheda va in secondo piano nel momento
     // sbagliato, e una promessa che non si risolve blocca l'esercizio per sempre.
-    setTimeout(risolvi, durataMs + CODA_MS + SILENZIO_MS + 400);
+    setTimeout(fine, durataMs + CODA_MS + SILENZIO_MS + 400);
   });
 }
 
-/** Un arpeggio o una scala: note in fila, ognuna aspettata. */
+/** Un arpeggio o una scala: note in fila, ognuna aspettata. Si interrompe se zittita. */
 export async function daiLeNote(frequenze, { durataMs = 700, pausaMs = 60 } = {}) {
+  const gen = generazione;
   for (const f of frequenze) {
+    if (gen !== generazione) return;      // qualcuno ha zittito: la sequenza muore qui
     await daiLaNota(f, { durataMs });
     if (pausaMs) await new Promise((r) => setTimeout(r, pausaMs));
   }
+}
+
+/**
+ * Spegne di colpo tutto quello che l'app sta suonando, sequenze comprese.
+ *
+ * Serve alla navigazione: senza, cambiare schermata durante una scala lasciava le note
+ * restanti a suonare sopra la schermata nuova — e in un'app costruita sull'alternanza,
+ * un suono orfano dell'app è esattamente la cosa che non deve esistere.
+ */
+export function zittisci() {
+  generazione += 1;
+  for (const spegni of [...vive]) spegni();
+  vive.clear();
 }
 
 export function chiudi() {

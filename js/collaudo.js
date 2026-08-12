@@ -883,6 +883,19 @@ gruppo('Alternanza — l\'app tace davvero mentre misura', (t) => {
         distanza <= -60, `${distanza.toFixed(1)} dB`);
       t.ok('e in assoluto è sotto i −80 dBFS', dbfs(dopo) < -80, `${dbfs(dopo).toFixed(1)} dBFS`);
 
+      // `zittisci()` deve spegnere DI COLPO: è quello che succede navigando via durante
+      // una scala, e senza, le note restanti suonavano sopra la schermata nuova — un suono
+      // orfano dell'app in un'app costruita sull'alternanza.
+      audio.daiLaNota(440, { durataMs: 1200 });
+      attendi(c, 250);
+      const primaDiZittire = rmsDi(an);
+      audio.zittisci();
+      attendi(c, 150);
+      const dopoZittito = rmsDi(an);
+      t.ok('prima di zittire la nota suona', primaDiZittire > 0.01, `${dbfs(primaDiZittire).toFixed(1)} dBFS`);
+      t.ok('zittisci spegne la nota di colpo', dbfs(dopoZittito) < -60,
+        `${dbfs(dopoZittito).toFixed(1)} dBFS`);
+
       // La nota di riferimento è DAVVERO quella nota, e ha armoniche: una sinusoide pura
       // è difficile da agganciare per l'orecchio, e chi non è allenato ci canta sopra a
       // caso. Questa prova è l'unica cosa che tiene onesta quella decisione di §2.
@@ -1295,6 +1308,84 @@ gruppo('Agilità e melodia — i due criteri devono valere insieme', (t) => {
   const vm = esercizi.giudicaMelodia(traslata);
   t.ok('una melodia giusta ma trasportata viene presa tutta', vm.promosso, vm.titolo);
   t.ok('e le si dice che l\'ha trasportata', /trasportata/i.test(vm.dettaglio), vm.dettaglio);
+});
+
+// ── Le misure che mentivano sui bordi ────────────────────────────────────────
+
+gruppo('Fiato — il silenzio non è fiato', (t) => {
+  // ⚠️ Il difetto: `serie` tappa i buchi con l'ultimo valore buono (serve al vibrato, che
+  // vuole un passo costante), e il fiato la leggeva. Una nota da 5 secondi seguita da 27
+  // di silenzio misurava 32 secondi: l'ultimo valore restava «dentro tolleranza» fino a
+  // fine finestra. Il cantante sintetico cantava tutta la finestra — il difetto dormiva.
+  const dt = 25;
+  const nota5s = Array.from({ length: 200 }, () => 5);
+  const silenzio27s = Array.from({ length: 1080 }, () => null);
+  const tappata = [...nota5s, ...Array.from({ length: 1080 }, () => 5)]; // com'era: buchi tappati
+
+  const giusto = esercizi.giudicaFiato({ serieBuchi: [...nota5s, ...silenzio27s], dtMs: dt });
+  t.ok('cinque secondi di nota e ventisette di silenzio misurano ~5 secondi',
+    Math.abs(giusto.valore - 5) < 0.3, `${giusto.valore.toFixed(1)} s`);
+  // RED per costruzione: sulla serie tappata il difetto DEVE ricomparire.
+  const bugia = esercizi.giudicaFiato({ serie: tappata, dtMs: dt });
+  t.ok('sulla serie coi buchi tappati il difetto si rivede (32 secondi)',
+    bugia.valore > 30, `${bugia.valore.toFixed(1)} s`);
+  t.misura('stessa voce, due letture', `coi buchi ${giusto.valore.toFixed(1)} s · tappata ${bugia.valore.toFixed(1)} s`);
+
+  // Un buco in MEZZO azzera la corsa come una stonatura: riprendere fiato interrompe la
+  // nota, ed è giusto che il conteggio riparta.
+  const conRespiro = esercizi.giudicaFiato({
+    serieBuchi: [...nota5s, null, null, null, null, ...nota5s], dtMs: dt,
+  });
+  t.ok('un respiro in mezzo azzera la corsa: due tratti da 5 valgono 5, non 10',
+    Math.abs(conRespiro.valore - 5) < 0.3, `${conRespiro.valore.toFixed(1)} s`);
+});
+
+gruppo('Intervalli — le due note si ritagliano, non si spacca il tempo a metà', (t) => {
+  // ⚠️ Il difetto: mediana sulle due metà TEMPORALI. Chi teneva la prima nota 5 secondi e
+  // la seconda 1 aveva la «seconda metà» ancora dentro la prima nota: a una quinta esatta
+  // l'app diceva «intervallo stretto». Qui la scena è ricostruita e si mostrano le due
+  // letture fianco a fianco.
+  const dt = 25;
+  const partenza = 57;                       // La3
+  const lunga = Array.from({ length: 200 }, () => partenza + 0.02);   // 5 s di La3
+  const respiro = Array.from({ length: 8 }, () => null);
+  const corta = Array.from({ length: 40 }, () => partenza + 7 + 0.02); // 1 s di Mi4
+  const serieMidi = [...lunga, ...respiro, ...corta];
+
+  const note = melodie.segmentaNote(serieMidi, dt, { minMs: 250 });
+  t.uguale('si ritagliano due note', note.length, 2);
+  const vNuovo = esercizi.giudicaIntervallo({
+    centDiPartenza: (note[0].midi - partenza) * 100,
+    centDiArrivo: (note[1].midi - partenza) * 100,
+    semitoni: 7,
+  });
+  t.ok('la quinta esatta con la prima nota lunga viene promossa', vNuovo.promosso,
+    `${vNuovo.titolo} — ${vNuovo.righe.join('')}`);
+
+  // RED per costruzione: il vecchio metodo sulla stessa scena DEVE sbagliare.
+  const tappa = serieMidi.map((v, i) => { let u = serieMidi.slice(0, i + 1).filter(Boolean).pop(); return (u - partenza) * 100; });
+  const meta = Math.floor(tappa.length / 2);
+  const mediana = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
+  const vVecchio = esercizi.giudicaIntervallo({
+    centDiPartenza: mediana(tappa.slice(0, meta)), centDiArrivo: mediana(tappa.slice(meta)), semitoni: 7,
+  });
+  t.ok('col metodo delle due metà il difetto si rivede', !vVecchio.promosso,
+    `${vVecchio.titolo} — se questa prova un giorno passa, il metodo vecchio non era il problema`);
+  t.misura('stessa quinta, due metodi',
+    `ritaglio: ${vNuovo.titolo} · due metà: ${vVecchio.titolo}`);
+});
+
+gruppo('Livello — la barra non dice «non ti sento» a chi viene sentito', (t) => {
+  const r = rilevatoreFinto();
+  // ⚠️ Il fondo scala era −60 dBFS ma la soglia sente da −62: una nota UDITA mostrava
+  // barra vuota, cioè il disegno contraddiceva la misura. La barra esiste per distinguere
+  // «suono troppo piano» da «non capisce cosa suono»: se mente ai bordi non serve a niente.
+  const pavimento = 0.0008;                        // il minimo assoluto della soglia
+  t.ok('al pavimento della soglia la barra mostra già qualcosa',
+    r.livello(pavimento) > 0.05, `livello ${r.livello(pavimento).toFixed(3)} a ${dbfs(pavimento).toFixed(1)} dBFS`);
+  t.ok('e cresce monotona da lì in su',
+    r.livello(0.0008) < r.livello(0.003) && r.livello(0.003) < r.livello(0.05));
+  t.uguale('il silenzio assoluto resta a zero', r.livello(0), 0);
 });
 
 // ── Ripetizione spaziata ─────────────────────────────────────────────────────

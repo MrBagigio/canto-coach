@@ -51,7 +51,11 @@ const PASSO_CENT = 20;
 const RMS_MINIMO = 0.0008;      // ≈ −62 dBFS
 const RMS_MASSIMO = 0.05;       // ≈ −26 dBFS
 const SOPRA_IL_RUMORE = 2.0;    // ≈ +4,8 dB di voce sopra il rumore misurato
-const LIVELLO_DB_MIN = -60;     // fondo scala della barra
+// Fondo scala della barra: DEVE stare sotto il pavimento della soglia (−62 dBFS), non
+// sopra. Con il fondo a −60, un mugolato a −61 che l'app sentiva benissimo mostrava barra
+// vuota: il disegno diceva «non ti sento» mentre la misura funzionava — e la barra esiste
+// proprio per distinguere «suono troppo piano» da «non capisce cosa suono».
+const LIVELLO_DB_MIN = -70;
 const LIVELLO_DB_MAX = -12;     // oltre: forte, e vicino a saturare
 // Finestra su cui si cerca il rumore di fondo: 20 blocchi da 10 letture. Il ciclo
 // dell'accordatore gira ogni 25 ms, quindi sono 5 secondi — più lunghi di una pennata,

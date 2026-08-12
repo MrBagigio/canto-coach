@@ -284,15 +284,25 @@ export function giudicaIntervallo({ centDiPartenza, centDiArrivo, semitoni }) {
  * sirena. E il numero serve a essere confrontato con sé stesso fra due settimane, non con
  * quello di un altro — 8–12 secondi da principiante, 20–30 da allenato.
  */
-export function giudicaFiato({ serie, dtMs }, { tolleranza = TOLLERANZA + 15 } = {}) {
+export function giudicaFiato({ serieBuchi, serie, dtMs }, { tolleranza = TOLLERANZA + 15 } = {}) {
+  // Si legge la serie CON i buchi: il silenzio azzera il conteggio come una stonatura.
+  // La prima stesura leggeva la serie tappata, dove l'ultimo valore buono sopravvive al
+  // silenzio: una nota da 5 secondi seguita da 27 di niente misurava 32 secondi di fiato.
+  // Il cantante sintetico cantava tutta la finestra, e il difetto dormiva lì sotto.
+  const letture = serieBuchi || serie;
   let miglior = 0;
   let corrente = 0;
-  for (const c of serie) {
-    if (Math.abs(c) <= tolleranza) { corrente += dtMs; miglior = Math.max(miglior, corrente); } else corrente = 0;
+  let conVoce = 0;
+  for (const c of letture) {
+    if (c !== null && Math.abs(c) <= tolleranza) {
+      corrente += dtMs;
+      miglior = Math.max(miglior, corrente);
+    } else corrente = 0;
+    if (c !== null) conVoce += 1;
   }
   const secondi = miglior / 1000;
   const righe = [`${secondi.toFixed(1)} secondi dentro ${tolleranza} centesimi`,
-    `${((serie.length * dtMs) / 1000).toFixed(1)} secondi di suono in tutto`];
+    `${((conVoce * dtMs) / 1000).toFixed(1)} secondi di voce in tutto`];
   return verdetto(`${secondi.toFixed(1)} secondi`, righe, secondi >= 8,
     secondi < 8
       ? 'Sotto gli otto secondi. Non è una pagella: è il numero da guardare fra due settimane.'

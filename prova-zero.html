@@ -123,7 +123,7 @@ function esegui(p, ui) {
       const t = performance.now() - inizio;
       letture.push({ t, rms: l.rms, hz: l.hz, chiarezza: l.chiarezza, soglia: l.soglia });
       ui.barra.style.width = `${(l.livello * 100).toFixed(0)}%`;
-      ui.tacca.style.left = `${(Math.max(0, Math.min(1, (dbfs(l.soglia) + 60) / 48)) * 100).toFixed(0)}%`;
+      ui.tacca.style.left = `${(Math.max(0, Math.min(1, (dbfs(l.soglia) + 70) / 58)) * 100).toFixed(0)}%`;
       const restano = Math.max(0, p.secondi - t / 1000);
       ui.conta.textContent = restano > 0.05 ? restano.toFixed(1) : '✓';
       ui.num.innerHTML = l.hz

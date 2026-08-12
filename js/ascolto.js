@@ -9,6 +9,7 @@
 // `prova-zero.html` può dirlo invece di lasciarlo credere.
 
 import { Rilevatore, centesimi, midiDaHz } from './pitch.js';
+import * as audio from './audio.js';
 
 const PASSO_MS = 25;
 const dbfs = (rms) => 20 * Math.log10(Math.max(rms, 1e-9));
@@ -28,13 +29,17 @@ export class Ascolto {
     this.flusso = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
-    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    await this.ctx.resume().catch(() => {});
-    const sorgente = this.ctx.createMediaStreamSource(this.flusso);
+    // Il contesto è QUELLO dell'app, non uno nuovo: su iPhone un secondo contesto creato
+    // fuori da un gesto resta sospeso per sempre — analizzatore a zero, app sorda, nessun
+    // errore. Vedi il commento su `contesto()` in audio.js. Qui si prova comunque a
+    // sbloccarlo, ma la ripresa che CONTA è quella dentro i gestori dei pulsanti.
+    this.ctx = audio.contesto();
+    await audio.sblocca();
+    this._sorgente = this.ctx.createMediaStreamSource(this.flusso);
     this.analizzatore = this.ctx.createAnalyser();
     this.analizzatore.fftSize = 4096;
     this.analizzatore.smoothingTimeConstant = 0;
-    sorgente.connect(this.analizzatore);
+    this._sorgente.connect(this.analizzatore);
     this.rilevatore = new Rilevatore(this.analizzatore);
     return this.stato();
   }
@@ -65,10 +70,11 @@ export class Ascolto {
    *   l'autocorrelazione del vibrato vuole un passo costante), `dentro` è la frazione di
    *   letture in cui una nota c'era davvero.
    */
-  raccogli(bersaglioHz, ms, suLettura = null, { conTimbro = false } = {}) {
+  raccogli(bersaglioHz, ms, suLettura = null, { conTimbro = false, fermaDopoSilenzioMs = 0 } = {}) {
     return new Promise((risolvi) => {
       const grezze = [];
       const inizio = performance.now();
+      let ultimaVoceT = null;
       clearInterval(this.giro);
       this.giro = setInterval(() => {
         const l = this.rilevatore.leggi();
@@ -78,8 +84,16 @@ export class Ascolto {
           t, hz: l.hz, rms: l.rms, livello: l.livello, silenzio: l.silenzio,
           brillantezza: conTimbro && l.hz ? this._brillantezza(l.hz) : null,
         });
+        if (l.hz) ultimaVoceT = t;
         if (suLettura) suLettura(l, t / ms);
-        if (t >= ms) {
+        // Chiusura anticipata sul silenzio: serve al fiato, dove la finestra è di 32
+        // secondi. Senza, chi molla la nota dopo otto resta a fissare lo schermo per
+        // altri ventiquattro — e un esercizio che ti fa aspettare il nulla è un esercizio
+        // che non rifai. Scatta solo DOPO aver sentito una voce: il silenzio prima che tu
+        // parta è attesa, non fine.
+        const finita = fermaDopoSilenzioMs > 0 && ultimaVoceT !== null
+          && t - ultimaVoceT >= fermaDopoSilenzioMs;
+        if (t >= ms || finita) {
           clearInterval(this.giro);
           this.giro = null;
           risolvi(this._impacchetta(grezze, bersaglioHz));
@@ -167,6 +181,13 @@ export class Ascolto {
     const dt = grezze.length > 1 ? (grezze[grezze.length - 1].t - grezze[0].t) / (grezze.length - 1) : PASSO_MS;
     return {
       serie,
+      // La stessa serie ma CON i buchi, come null. La differenza non è un dettaglio:
+      // `serie` tappa i buchi con l'ultimo valore buono perché l'autocorrelazione del
+      // vibrato vuole un passo costante — ma una misura di DURATA letta sulla serie
+      // tappata conta il silenzio come nota. È successo: il fiato di una nota da 5
+      // secondi seguita da 27 di silenzio usciva 32, perché l'ultimo valore restava
+      // "dentro tolleranza" fino a fine finestra. Chi misura durate legge QUESTA.
+      serieBuchi: grezze.map((g) => (g.hz && riferimento ? centesimi(g.hz, riferimento) : null)),
       grezze,
       dtMs: dt,
       riferimento,
@@ -189,8 +210,10 @@ export class Ascolto {
   chiudi() {
     this.ferma();
     if (this.flusso) this.flusso.getTracks().forEach((t) => t.stop());
-    if (this.ctx) this.ctx.close().catch(() => {});
-    this.flusso = null; this.ctx = null; this.analizzatore = null; this.rilevatore = null;
+    // Il contesto NON si chiude: è quello condiviso dell'app, e chiuderlo qui
+    // ammutolirebbe anche la nota di riferimento. Si stacca solo il proprio ramo.
+    if (this._sorgente) { try { this._sorgente.disconnect(); } catch { /* già staccata */ } }
+    this.flusso = null; this._sorgente = null; this.analizzatore = null; this.rilevatore = null;
   }
 }
 

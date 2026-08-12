@@ -12,7 +12,7 @@ invece di aggirarlo).
 - In locale: `node tools/serve.mjs` → 4181 (voce `canto` nel launch.json di MetaUpgrader)
 - Per pubblicare: `node tools/carica-commit.mjs` (prova a vuoto) poi `--scrivi`. Da qui la
   spinta con git è bloccata dall'hook, si passa dalla API Git Data.
-- **Banco: [`collaudo.html`](collaudo.html) — 328 prove, tutte verdi.**
+- **Banco: [`collaudo.html`](collaudo.html) — 341 prove, tutte verdi.**
 - **Sul telefono: [`prova-zero.html`](prova-zero.html)** — misura la tua stanza e la tua voce.
 
 Il motore viene da [ukulele-coach](../ukulele-coach) (`js/pitch.js`). Le prove 0–4
@@ -61,9 +61,9 @@ lo strumento sbaglia al massimo 7,5 centesimi, e il collaudo verifica che ci sia
 fattore quattro fra i due, altrimenti l'app starebbe giudicando il rumore della propria
 misura e lo chiamerebbe intonazione.
 
-### Sette difetti trovati GUIDANDO l'app, non leggendo il codice
+### Undici difetti trovati GUIDANDO l'app, non leggendo il codice
 
-Nessuno dei sette dava un errore in console, e il collaudo era verde con tutti e sette
+Nessuno dava un errore in console, e il collaudo era verde con tutti
 dentro. Il metodo: un **cantante sintetico** che legge l'istruzione a schermo («tieni il
 Sol3», «ripetila dal Fa♯3») e canta quella nota attraverso la vera `getUserMedia`. Fa
 quello che farebbe una persona, e trova quello che una persona troverebbe.
@@ -104,6 +104,34 @@ quello che farebbe una persona, e trova quello che una persona troverebbe.
 E uno di comportamento: i primi 400 ms di una nota sono l'attacco, non la tenuta, e
 includerli faceva risultare instabile una nota tenuta benissimo. L'attacco ha un esercizio
 suo, dove viene giudicato con il metro giusto.
+
+### La passata su volumi e misure (quattro difetti in più)
+
+8. **Il fiato contava il silenzio.** `serie` tappa i buchi con l'ultimo valore buono
+   (serve al vibrato, che vuole un passo costante) e il fiato la leggeva: una nota da 5
+   secondi seguita da 27 di silenzio misurava **32 secondi**. Ora esiste `serieBuchi` — la
+   stessa serie coi buchi come `null` — e chi misura durate legge quella. Il RED per
+   costruzione rifà la scena su entrambe le serie: 5,0 contro 32,0. In più la misura si
+   chiude da sola dopo 3 secondi di silenzio, invece di far fissare lo schermo per la coda
+   di una finestra da 32.
+9. **L'intervallo spaccava il tempo a metà.** Mediana sulle due metà temporali: chi teneva
+   la prima nota 5 secondi e la seconda 1 aveva la «seconda metà» ancora dentro la prima
+   nota — a una quinta esatta l'app diceva «intervallo stretto». Ora le due note le
+   ritaglia `segmentaNote` (prima e ultima, così un glissando in mezzo non conta), e il
+   collaudo mostra i due metodi fianco a fianco sulla stessa scena.
+10. **Due `AudioContext`, e su iPhone è la ricetta del muto.** Uno per suonare e uno per il
+    microfono, e quello del microfono nasceva al montaggio della schermata — dove un gesto
+    non c'è, e Safari lo tiene sospeso per sempre: analizzatore a zero, app che non dà la
+    nota e non sente, nessun errore. Ora il contesto è **uno solo** per uscita e ingresso,
+    e la ripresa sta dentro ogni gestore di tocco.
+11. **La barra del livello mentiva ai bordi.** Fondo scala a −60 dBFS con la soglia che
+    sente da −62: una nota che l'app sentiva mostrava barra vuota — «non ti sento» scritto
+    col disegno mentre la misura funzionava. Fondo scala a −70, e la tacca rossa della
+    soglia ora sta anche sul quadrante degli esercizi: se la barra la supera, ti sente.
+
+E la navigazione ora **zittisce l'uscita**: cambiare schermata durante una scala lasciava
+le note restanti a suonare sopra la schermata nuova — un suono orfano dell'app, in un'app
+costruita sull'alternanza. `zittisci()` spegne tutto di colpo, misurato nel collaudo.
 
 ## Prima: prove 0–4 sul motore
 

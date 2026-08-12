@@ -75,10 +75,17 @@ function quadrante() {
   const ago = d.querySelector('.ago');
   const lettura = d.querySelector('.lettura');
   const barra = d.querySelector('.livello i');
+  const tacca = d.querySelector('.livello u');
+  // La stessa scala della barra (definita in pitch.js): la tacca della soglia deve stare
+  // sulla scala VERA, non su una inventata qui — altrimenti barra e tacca si contraddicono.
+  const posDb = (db) => Math.max(0, Math.min(1, (db - (-70)) / (-12 - (-70))));
   return {
     nodo: d,
     aggiorna(l, bersaglioHz) {
       barra.style.width = `${(l.livello * 100).toFixed(0)}%`;
+      // La tacca della soglia: se la barra la supera, l'app ti sente. Risponde alla
+      // domanda «non mi sente perché suono piano o perché non capisce?» senza parole.
+      tacca.style.left = `${(posDb(20 * Math.log10(Math.max(l.soglia, 1e-9))) * 100).toFixed(0)}%`;
       if (!l.hz || !bersaglioHz) {
         ago.style.opacity = '0.25';
         lettura.textContent = l.silenzio ? 'non ti sento' : '…';
@@ -142,6 +149,9 @@ async function preparaMicrofono(dove) {
  * @param {function} cfg.giudica        (raccolta) => verdetto
  */
 async function giro(cfg, ui) {
+  // La ripresa del contesto sta QUI, dentro il gesto: su iPhone un contesto sospeso si
+  // sblocca solo da un gestore di tocco, e ogni giro parte da un tocco sul pulsante.
+  await audio.sblocca();
   ui.stato.textContent = cfg.note.length > 1 ? 'ascolta le note…' : 'ascolta la nota…';
   ui.stato.className = 'stato ascolta';
   ui.quadrante.spegni();
@@ -158,7 +168,7 @@ async function giro(cfg, ui) {
   const raccolta = await ascolto.raccogli(bersaglioHz, cfg.ascoltaMs, (l, avanzamento) => {
     ui.quadrante.aggiorna(l, bersaglioHz);
     ui.progresso.style.width = `${Math.min(100, avanzamento * 100).toFixed(0)}%`;
-  });
+  }, cfg.opzioniAscolto || {});
   ui.progresso.style.width = '0';
   ui.stato.textContent = '';
   ui.stato.className = 'stato';
@@ -220,6 +230,7 @@ async function vistaNotaTenuta() {
     corpo.insertBefore(nota(`Prima volta: non so ancora dove sta comoda la tua voce, e darti una nota a caso vorrebbe dire darti quella di un altro. Mugola o canta una nota qualunque, quella che ti viene senza sforzo.`), ui.quadrante.nodo);
     ui.pulsante.addEventListener('click', async function primaVolta() {
       ui.pulsante.disabled = true;
+      await audio.sblocca();                // iPhone: il contesto si sblocca solo qui
       ui.stato.textContent = 'canta…';
       ui.stato.className = 'stato canta';
       ascolto.dimenticaLaStanza();
@@ -414,6 +425,7 @@ async function vistaIntervalli() {
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    await audio.sblocca();
     const facili = INTERVALLI.filter((i) => i.facilita <= 3);
     const scelto = facili[Math.floor(Math.random() * facili.length)];
     const partenza = notaOppureSpiega({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - scelto.semitoni) }, ui);
@@ -437,16 +449,25 @@ async function vistaIntervalli() {
     ui.stato.className = 'stato';
     ui.quadrante.spegni();
 
-    // Le due note si trovano dividendo in due la parte cantata: la prima metà è la nota di
-    // partenza, la seconda quella di arrivo. Si prende la mediana di ciascuna, non la
-    // media, perché il salto in mezzo è un glissando e la media lo spalmerebbe su entrambe.
-    const meta = Math.floor(racc.serie.length / 2);
-    const mediana = (a) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : null);
-    const c1 = mediana(racc.serie.slice(0, meta));
-    const c2 = mediana(racc.serie.slice(meta));
-    const v = (c1 === null || c2 === null || racc.dentro < 0.4)
-      ? { titolo: 'Non ti ho sentito abbastanza', righe: [`nota riconosciuta nel ${Math.round(racc.dentro * 100)}% del tempo`], promosso: false, dettaglio: 'Servono due note tenute, una dopo l\'altra, senza pause lunghe.' }
-      : giudicaIntervallo({ centDiPartenza: c1, centDiArrivo: c2, semitoni: scelto.semitoni });
+    // Le due note si RITAGLIANO, non si divide il tempo a metà. La prima stesura spaccava
+    // la serie in due e prendeva la mediana di ciascuna metà: bastava tenere la prima nota
+    // più a lungo della seconda e la "seconda metà" cadeva ancora dentro la prima nota —
+    // a chi cantava una quinta esatta l'app diceva «intervallo stretto». Le note le trova
+    // `segmentaNote`, che è fatto apposta e sta sotto collaudo; si prendono la prima e
+    // l'ultima, così un glissando di passaggio in mezzo non conta come nota.
+    const note = segmentaNote(racc.serieMidi, racc.dtMs, { minMs: 250 });
+    const v = (note.length < 2)
+      ? {
+        titolo: 'Non ho sentito due note distinte',
+        righe: [`note riconosciute: ${note.length}`],
+        promosso: false,
+        dettaglio: 'Servono due note tenute, una dopo l\'altra — un respiro in mezzo va benissimo.',
+      }
+      : giudicaIntervallo({
+        centDiPartenza: (note[0].midi - partenza) * 100,
+        centDiArrivo: (note[note.length - 1].midi - partenza) * 100,
+        semitoni: scelto.semitoni,
+      });
     ui.esiti.prepend(cartaVerdetto(v));
     store.salvaSessione({ esercizio: 'intervalli', intervallo: scelto.nome, promosso: v.promosso });
     ui.pulsante.disabled = false;
@@ -476,6 +497,9 @@ async function vistaFiato() {
       note: [m],
       bersaglio: m,
       ascoltaMs: 32000,
+      // Quando molli la nota, tre secondi di silenzio chiudono la misura: nessuno deve
+      // fissare lo schermo per la coda di una finestra da 32 secondi.
+      opzioniAscolto: { fermaDopoSilenzioMs: 3000 },
       invito: `tieni il ${nome(m)} finché ce la fai`,
       giudica: (racc) => giudicaFiato(racc),
     }, ui);
@@ -497,6 +521,7 @@ async function vistaPassaggio() {
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    await audio.sblocca();
     const partenza = Math.round(zona.basso);
     ui.stato.textContent = 'ascolta la nota di partenza…';
     ui.stato.className = 'stato ascolta';
@@ -643,6 +668,7 @@ async function vistaStrumento() {
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    await audio.sblocca();
     ui.stato.textContent = 'suona una nota…';
     ui.stato.className = 'stato ascolta';
     ascolto.dimenticaLaStanza();
@@ -825,6 +851,9 @@ function vai() {
   // «l'app è piena di bug» senza poterne indicare uno.
   if (pulizia) { pulizia(); pulizia = null; }
   if (ascolto) ascolto.ferma();
+  // E si zittisce anche l'USCITA: cambiare schermata durante una scala lasciava le note
+  // restanti a suonare sopra la schermata nuova.
+  audio.zittisci();
   const vista = ROTTE[location.hash] || vistaCasa;
   const r = vista();
   if (typeof r === 'function') pulizia = r;
