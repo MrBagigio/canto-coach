@@ -90,6 +90,9 @@ export function scomponi(centesimi, dtMs) {
       fermezza: 0,
       confidenza: 0,
       misurabile: false,
+      // Anche qui, esplicito: senza questo, chi controlla `vibratoMisurabile === false`
+      // non vede il caso «serie corta» e scrive «voce ferma ±0» su una misura mai fatta.
+      vibratoMisurabile: false,
       motivo: `servono almeno ${minimo.toFixed(1)} s di nota tenuta, ce ne sono ${durata.toFixed(2)}`,
     };
   }

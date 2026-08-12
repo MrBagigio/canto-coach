@@ -12,7 +12,7 @@ invece di aggirarlo).
 - In locale: `node tools/serve.mjs` → 4181 (voce `canto` nel launch.json di MetaUpgrader)
 - Per pubblicare: `node tools/carica-commit.mjs` (prova a vuoto) poi `--scrivi`. Da qui la
   spinta con git è bloccata dall'hook, si passa dalla API Git Data.
-- **Banco: [`collaudo.html`](collaudo.html) — 341 prove, tutte verdi.**
+- **Banco: [`collaudo.html`](collaudo.html) — 364 prove, tutte verdi.**
 - **Sul telefono: [`prova-zero.html`](prova-zero.html)** — misura la tua stanza e la tua voce.
 
 Il motore viene da [ukulele-coach](../ukulele-coach) (`js/pitch.js`). Le prove 0–4
@@ -61,7 +61,7 @@ lo strumento sbaglia al massimo 7,5 centesimi, e il collaudo verifica che ci sia
 fattore quattro fra i due, altrimenti l'app starebbe giudicando il rumore della propria
 misura e lo chiamerebbe intonazione.
 
-### Undici difetti trovati GUIDANDO l'app, non leggendo il codice
+### Quattordici difetti trovati GUIDANDO l'app, non leggendo il codice
 
 Nessuno dava un errore in console, e il collaudo era verde con tutti
 dentro. Il metodo: un **cantante sintetico** che legge l'istruzione a schermo («tieni il
@@ -132,6 +132,33 @@ suo, dove viene giudicato con il metro giusto.
 E la navigazione ora **zittisce l'uscita**: cambiare schermata durante una scala lasciava
 le note restanti a suonare sopra la schermata nuova — un suono orfano dell'app, in un'app
 costruita sull'alternanza. `zittisci()` spegne tutto di colpo, misurato nel collaudo.
+
+### La passata di scavo (tre difetti in più, e due migliorie)
+
+12. **L'ambito della melodia: gradi spacciati per semitoni.** La zona comoda si misura in
+    semitoni, l'ambito di `melodiaGenerata` in gradi di scala, e il grado 8 della maggiore
+    sta a **quattordici** semitoni dalla tonica: con una zona comoda di 8 semitoni la
+    melodia chiedeva note sei semitoni sopra dove arrivi — l'esatto contrario della
+    promessa «le note te le do dove ci arrivi». Due unità che si somigliano abbastanza da
+    scambiarle senza che niente esploda sono le più pericolose: ora c'è `gradiInSemitoni`
+    e il RED rifà lo scambio e pretende che sbordi. Verificato dal vivo: con 8 semitoni di
+    estensione, tre melodie di fila restano nei 4 della zona comoda.
+13. **L'attacco tagliato due volte.** `giudicaNotaTenuta` toglie i primi 400 ms, e `calo()`
+    per conto suo ne toglieva altri 500 (è pensato per serie intere): quasi un secondo di
+    nota buttato, e la durata a schermo più corta del vero. Due funzioni che si proteggono
+    dallo stesso difetto si sommano in un difetto nuovo.
+14. **L'estensione dichiarava note mai cantate.** `grave` e `acuto` partivano già uguali
+    alla nota di partenza *prima* che fosse cantata: chi falliva subito la prima nota in
+    giù si trovava un «grave» mai cantato nel risultato. Ora partono da `null`, la prima
+    nota **presa** è insieme grave e acuto provvisori, e zero note prese dà «nessuna nota
+    presa» — non un intervallo inventato. È la forma numero uno dei difetti di questa
+    famiglia, vestita da inizializzazione innocua.
+
+E due migliorie da app vera: **wake lock** durante gli esercizi (il fiato dura 32 secondi
+senza toccare lo schermo, e su iPhone lo spegnimento porta via anche l'audio — facoltativo
+e dichiarato tale), e **accessibilità**: lo stato è `role="status"` e i verdetti
+`aria-live="polite"`, così chi usa uno screen reader sente «canta il Sol3» e il verdetto
+senza andarseli a cercare.
 
 ## Prima: prove 0–4 sul motore
 

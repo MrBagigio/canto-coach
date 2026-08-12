@@ -153,7 +153,12 @@ export function giudicaNotaTenuta({ serie: tutta, dtMs, dentro }) {
   const daSaltare = Math.min(Math.floor(tutta.length / 3), Math.round(ATTACCO_DA_SALTARE_MS / dtMs));
   const serie = tutta.slice(daSaltare);
   const v = scomponi(serie, dtMs);
-  const c = calo(serie, dtMs);
+  // `daMs: 0` perché l'attacco è GIÀ stato tolto qui sopra: `calo` per conto suo ne salta
+  // altri 500 (è pensato per serie intere), e lasciarglielo fare tagliava l'attacco due
+  // volte — quasi un secondo di nota buttato, e la durata dichiarata a schermo più corta
+  // del vero. Due funzioni che si proteggono dallo stesso difetto si sommano in un difetto
+  // nuovo.
+  const c = calo(serie, dtMs, { daMs: 0 });
   const righe = [];
   const media = v.media;
   const deriva = c ? c.calo : 0;
@@ -486,9 +491,15 @@ export function giudicaPassaggio(esito) {
 export function estensioneInizio(midiPartenza) {
   return {
     verso: 'giu',
+    partenza: Math.round(midiPartenza),
     corrente: Math.round(midiPartenza),
-    grave: Math.round(midiPartenza),
-    acuto: Math.round(midiPartenza),
+    // Null finché una nota non è stata PRESA davvero. La prima stesura li inizializzava
+    // alla nota di partenza, cioè li dichiarava prima di misurarli: chi falliva subito la
+    // prima nota in giù si ritrovava un «grave» mai cantato dentro il risultato. È la
+    // forma numero uno dei difetti di questa famiglia — dichiarare ciò che non si misura —
+    // vestita da inizializzazione innocua.
+    grave: null,
+    acuto: null,
     finito: false,
     motivoFine: '',
   };
@@ -498,12 +509,18 @@ export function estensionePasso(stato, esito) {
   const s = { ...stato };
   const preso = esito === 'presa';
   if (preso) {
-    if (s.verso === 'giu') s.grave = Math.min(s.grave, s.corrente);
-    else s.acuto = Math.max(s.acuto, s.corrente);
+    // Una nota presa allarga ENTRAMBI i confini: la prima nota dell'esercizio è insieme
+    // il grave e l'acuto provvisori, qualunque sia il verso di marcia.
+    s.grave = s.grave === null ? s.corrente : Math.min(s.grave, s.corrente);
+    s.acuto = s.acuto === null ? s.corrente : Math.max(s.acuto, s.corrente);
   }
 
   const cambiaVerso = () => {
-    if (s.verso === 'giu') { s.verso = 'su'; s.corrente = s.acuto + 1; return; }
+    if (s.verso === 'giu') {
+      s.verso = 'su';
+      s.corrente = (s.acuto === null ? s.partenza : s.acuto) + 1;
+      return;
+    }
     s.finito = true;
   };
 
@@ -537,6 +554,16 @@ export function estensionePasso(stato, esito) {
 export const ESTENSIONE_MINIMA = 3;
 
 export function estensioneRiassunto(stato) {
+  if (stato.grave === null || stato.acuto === null) {
+    return {
+      grave: null,
+      acuto: null,
+      semitoni: 0,
+      ottave: 0,
+      attendibile: false,
+      testo: 'nessuna nota presa',
+    };
+  }
   const semitoni = stato.acuto - stato.grave;
   return {
     grave: stato.grave,

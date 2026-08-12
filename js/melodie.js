@@ -37,6 +37,22 @@ export function gradoDi(tonica, n, scala = SCALE.maggiore) {
 }
 
 /**
+ * Quanti GRADI di scala stanno dentro un certo numero di SEMITONI.
+ *
+ * Esiste perché le due unità si somigliano abbastanza da scambiarle senza che niente
+ * esploda, ed è successo: `melodiaGenerata` conta l'ambito in gradi, la zona comoda di chi
+ * canta si misura in semitoni, e passare l'una dove serviva l'altra faceva chiedere note
+ * fino a SEI semitoni sopra la zona comoda — il grado 8 della maggiore sta a quattordici
+ * semitoni dalla tonica, non a otto. A chi canta arrivava l'esatto contrario della
+ * promessa «le note te le do dove ci arrivi».
+ */
+export function gradiInSemitoni(semitoni, scala = SCALE.maggiore) {
+  let n = 0;
+  while (gradoDi(0, n + 1, scala) <= semitoni) n += 1;
+  return n;
+}
+
+/**
  * La scala dell'esercizio di agilità: su e giù, cinque note.
  *
  * È l'esercizio classico — quello che qualunque insegnante fa fare — e qui è cronometrato.

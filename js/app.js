@@ -16,7 +16,7 @@ import {
   giudicaAgilita, giudicaMelodia, trovaPassaggio, giudicaPassaggio,
   estensioneInizio, estensionePasso, estensioneRiassunto,
 } from './esercizi.js';
-import { scalaAgilita, melodiaGenerata, segmentaNote, confrontaSequenza } from './melodie.js';
+import { scalaAgilita, melodiaGenerata, segmentaNote, confrontaSequenza, gradiInSemitoni } from './melodie.js';
 import { rispondi, prossima, daRivedere, consolidamento } from './ripasso.js';
 import { oggi } from './percorso.js';
 
@@ -152,6 +152,19 @@ async function giro(cfg, ui) {
   // La ripresa del contesto sta QUI, dentro il gesto: su iPhone un contesto sospeso si
   // sblocca solo da un gestore di tocco, e ogni giro parte da un tocco sul pulsante.
   await audio.sblocca();
+  // Lo schermo non deve spegnersi a metà esercizio: il fiato dura fino a 32 secondi senza
+  // che tu tocchi niente, e su iPhone lo spegnimento porta via anche l'audio. Il wake lock
+  // è un di-più dichiarato tale: se il browser non ce l'ha, l'esercizio funziona uguale.
+  let veglia = null;
+  try { veglia = await navigator.wakeLock?.request?.('screen'); } catch { /* facoltativo */ }
+  try {
+    return await giroDentro(cfg, ui);
+  } finally {
+    try { await veglia?.release?.(); } catch { /* già rilasciato dal sistema */ }
+  }
+}
+
+async function giroDentro(cfg, ui) {
   ui.stato.textContent = cfg.note.length > 1 ? 'ascolta le note…' : 'ascolta la nota…';
   ui.stato.className = 'stato ascolta';
   ui.quadrante.spegni();
@@ -203,11 +216,16 @@ function notaOppureSpiega(zona, ui, opzioni = {}) {
 function palco(corpo, testoPulsante) {
   const q = quadrante();
   const stato = el('div', 'stato');
+  // Lo stato e i verdetti vanno ANNUNCIATI, non solo disegnati: chi usa uno screen reader
+  // deve sentire «canta il Sol3» e il verdetto senza andarseli a cercare. `polite` e non
+  // `assertive`: l'annuncio non deve interrompere l'annuncio precedente a metà.
+  stato.setAttribute('role', 'status');
   const progresso = el('div', 'progresso');
   const barra = el('div', 'progresso-fuori');
   barra.appendChild(progresso);
   const pulsante = el('button', 'principale', testoPulsante);
   const esiti = el('div', 'esiti');
+  esiti.setAttribute('aria-live', 'polite');
   corpo.append(q.nodo, stato, barra, pulsante, esiti);
   return { quadrante: q, stato, progresso, pulsante, esiti };
 }
@@ -314,7 +332,12 @@ async function vistaEstensione() {
       dettaglio: stato.finito
         ? `${stato.motivoFine} Rifalla fra qualche giorno: è normale che cambi.`
         : `Adesso ${stato.verso === 'giu' ? 'scendiamo' : 'saliamo'}. Ferma appena senti sforzo.`,
-      righe: [`più grave comoda ${nome(stato.grave)}`, `più acuta comoda ${nome(stato.acuto)}`],
+      // I confini si scrivono solo quando esistono: prima che una nota sia presa non c'è
+      // nessun «più grave comoda» da mostrare, e inventarlo era il difetto, non un default.
+      righe: [
+        `più grave comoda ${stato.grave === null ? '—' : nome(stato.grave)}`,
+        `più acuta comoda ${stato.acuto === null ? '—' : nome(stato.acuto)}`,
+      ],
     }));
   };
 
@@ -723,7 +746,10 @@ async function vistaMelodia() {
     const tonica = notaOppureSpiega({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - 8) }, ui);
     if (tonica === null) return;
     seme += 1;
-    const ambito = Math.max(3, Math.min(8, Math.round(zona.alto - tonica)));
+    // L'ambito della melodia si conta in GRADI di scala, la zona comoda in SEMITONI, e la
+    // conversione non è opzionale: passare i semitoni come gradi chiedeva note fino a sei
+    // semitoni sopra la zona comoda (il grado 8 della maggiore sta a 14 semitoni, non 8).
+    const ambito = Math.max(2, gradiInSemitoni(zona.alto - tonica));
     const melodia = melodiaGenerata(tonica, { passi: 6, seme, ambito });
     const r = await giro({
       note: melodia,

@@ -1388,6 +1388,101 @@ gruppo('Livello — la barra non dice «non ti sento» a chi viene sentito', (t)
   t.uguale('il silenzio assoluto resta a zero', r.livello(0), 0);
 });
 
+// ── Unità di misura e doppi tagli ────────────────────────────────────────────
+
+gruppo('Melodie — l\'ambito si chiede in semitoni, non in gradi', (t) => {
+  // ⚠️ Le due unità si somigliano abbastanza da scambiarle senza che niente esploda, ed è
+  // successo: la zona comoda è in SEMITONI, l'ambito di `melodiaGenerata` in GRADI, e il
+  // grado 8 della maggiore sta a QUATTORDICI semitoni dalla tonica. Con una zona comoda di
+  // 8 semitoni la melodia chiedeva note sei semitoni sopra dove arrivi — l'esatto
+  // contrario della promessa «le note te le do dove ci arrivi».
+  t.uguale('8 semitoni contengono 4 gradi della maggiore (il 5° sta a 9)', melodie.gradiInSemitoni(8), 4);
+  t.uguale('12 semitoni contengono 7 gradi (l\'ottava giusta)', melodie.gradiInSemitoni(12), 7);
+  t.uguale('7 semitoni: 4 gradi (la quinta ci sta appena)', melodie.gradiInSemitoni(7), 4);
+  t.uguale('2 semitoni: 1 grado', melodie.gradiInSemitoni(2), 1);
+  t.misura('il vecchio scambio, in numeri',
+    `zona comoda di 8 semitoni → ambito 8 GRADI → nota più alta possibile a +${melodie.gradoDi(0, 8)} semitoni`);
+
+  const tonica = 55;
+  const zonaSemitoni = 8;
+  for (const seme of [1, 7, 42, 1234, 99999]) {
+    const m = melodie.melodiaGenerata(tonica, { passi: 6, seme, ambito: melodie.gradiInSemitoni(zonaSemitoni) });
+    t.ok(`seme ${seme}: con la conversione la melodia resta negli 8 semitoni della zona`,
+      m.every((x) => x - tonica <= zonaSemitoni), m.map(nomeIt).join(' '));
+  }
+  // RED per costruzione: con lo scambio di prima almeno un seme DEVE sbordare.
+  const sborda = [1, 7, 42, 1234, 99999].some((seme) => melodie
+    .melodiaGenerata(tonica, { passi: 6, seme, ambito: zonaSemitoni })
+    .some((x) => x - tonica > zonaSemitoni));
+  t.ok('passando i semitoni come gradi (com\'era) qualche melodia sborda davvero',
+    sborda, 'se nessuna sborda, la conversione non stava correggendo niente');
+});
+
+gruppo('Nota tenuta — l\'attacco si taglia una volta sola', (t) => {
+  // ⚠️ `giudicaNotaTenuta` toglie i primi 400 ms (l'attacco), e `calo()` per conto suo ne
+  // toglieva altri 500 — è pensato per serie intere. Due funzioni che si proteggono dallo
+  // stesso difetto si sommano in un difetto nuovo: quasi un secondo di nota buttato, e la
+  // durata dichiarata a schermo più corta del vero.
+  const dt = 25;
+  const cinqueSec = raccoltaFinta((s) => -10 * s, { n: 200, dtMs: dt });   // cala 10 cent/s
+  const v = esercizi.giudicaNotaTenuta(cinqueSec);
+  const riga = v.righe.find((r) => / in [\d.]+ s/.test(r)) || '';
+  const durata = parseFloat((riga.match(/in ([\d.]+) s/) || [])[1]);
+  t.ok('su 5 s di nota, la finestra del calo copre ~4,6 s (5 meno il solo attacco)',
+    durata >= 4.4, `${durata} s — con il doppio taglio erano 4,1`);
+  t.misura('durata dichiarata del calo su 5 s di voce', `${durata} s`);
+  // E il calo riportato deve corrispondere alla pendenza vera sulla finestra vera.
+  const cent = parseFloat((riga.match(/(−|\+)?([\d.]+) centesimi/) || [])[2]);
+  t.ok('il calo riportato torna con pendenza × durata',
+    Math.abs(cent - 10 * durata) < 4, `${cent} contro ${(10 * durata).toFixed(1)}`);
+});
+
+gruppo('Estensione — non dichiara note mai cantate', (t) => {
+  // ⚠️ `grave` e `acuto` partivano già uguali alla nota di partenza PRIMA che fosse
+  // cantata: chi falliva subito la prima nota in giù si trovava un «grave» mai cantato
+  // dentro il risultato. La forma numero uno di questa famiglia — dichiarare ciò che non
+  // si misura — vestita da inizializzazione innocua.
+  let s = esercizi.estensioneInizio(57);
+  t.uguale('prima di qualunque nota, il grave non esiste', s.grave, null);
+  t.uguale('e nemmeno l\'acuto', s.acuto, null);
+
+  // Fallisce la prima in giù, poi prende 58 e 59 salendo: il grave DEVE essere 58.
+  s = esercizi.estensionePasso(s, 'no');
+  t.uguale('fallita la prima, si riparte in su dalla nota sopra la partenza', s.corrente, 58);
+  s = esercizi.estensionePasso(s, 'presa');
+  s = esercizi.estensionePasso(s, 'presa');
+  s = esercizi.estensionePasso(s, 'no');
+  const r = esercizi.estensioneRiassunto(s);
+  t.uguale('il grave è la prima nota DAVVERO presa (58), non la partenza mai cantata (57)',
+    r.grave, 58);
+  t.uguale('e l\'acuto è 59', r.acuto, 59);
+
+  // Nessuna nota presa in assoluto: il riassunto lo dice, senza inventare numeri.
+  let z = esercizi.estensioneInizio(57);
+  z = esercizi.estensionePasso(z, 'no');
+  z = esercizi.estensionePasso(z, 'no');
+  const rz = esercizi.estensioneRiassunto(z);
+  t.ok('zero note prese = «nessuna nota presa», non un intervallo inventato',
+    rz.grave === null && !rz.attendibile && /nessuna/.test(rz.testo), rz.testo);
+
+  // E la prima nota presa allarga ENTRAMBI i confini, qualunque sia il verso.
+  let p = esercizi.estensioneInizio(57);
+  p = esercizi.estensionePasso(p, 'presa');
+  t.ok('la prima nota presa è insieme grave e acuto provvisori', p.grave === 57 && p.acuto === 57,
+    JSON.stringify({ grave: p.grave, acuto: p.acuto }));
+});
+
+gruppo('Vibrato — anche la serie corta dichiara di non aver misurato', (t) => {
+  // ⚠️ Il ramo «serie troppo corta» di `scomponi` non marcava `vibratoMisurabile: false`:
+  // chi controllava quel campo non vedeva il caso e scriveva «voce ferma ±0» su una misura
+  // mai fatta. Stesso buco della cadenza strozzata, porta diversa.
+  const corto = scomponi([1, 2, 1, 2, 1], 25);
+  t.uguale('serie corta: vibratoMisurabile è false, non undefined', corto.vibratoMisurabile, false);
+  const vCorto = esercizi.giudicaNotaTenuta({ serie: Array.from({ length: 30 }, () => 3), dtMs: 25, dentro: 1 });
+  t.ok('e il verdetto su una nota cortissima non scrive «voce ferma»',
+    !/voce ferma/.test(vCorto.righe.join(' ')), vCorto.righe.join(' · '));
+});
+
 // ── Ripetizione spaziata ─────────────────────────────────────────────────────
 
 gruppo('Ripasso — sbagliare riporta indietro, azzeccare dirada', (t) => {
