@@ -61,7 +61,7 @@ lo strumento sbaglia al massimo 7,5 centesimi, e il collaudo verifica che ci sia
 fattore quattro fra i due, altrimenti l'app starebbe giudicando il rumore della propria
 misura e lo chiamerebbe intonazione.
 
-### Quattordici difetti trovati GUIDANDO l'app, non leggendo il codice
+### Diciassette difetti trovati GUIDANDO l'app, non leggendo il codice
 
 Nessuno dava un errore in console, e il collaudo era verde con tutti
 dentro. Il metodo: un **cantante sintetico** che legge l'istruzione a schermo («tieni il
@@ -159,6 +159,29 @@ senza toccare lo schermo, e su iPhone lo spegnimento porta via anche l'audio —
 e dichiarato tale), e **accessibilità**: lo stato è `role="status"` e i verdetti
 `aria-live="polite"`, così chi usa uno screen reader sente «canta il Sol3» e il verdetto
 senza andarseli a cercare.
+
+### La passata «l'app ha tantissimi bug» (telefono vero)
+
+15. **Il microfono si apriva al montaggio della schermata, non a un tuo tocco.** Su iPhone
+    Safari sia il permesso del microfono sia lo sblocco dell'audio vogliono un gesto vero:
+    fuori da lì il permesso può non comparire affatto e il contesto resta sospeso — l'app
+    sembra rotta senza nessun errore. E anche dove funziona, chiedere il microfono a uno
+    che sta ancora leggendo cosa fa l'esercizio è il modo migliore per farselo negare. Ora
+    si apre al primo tocco su «Dammi una nota», dentro il gesto, in tutti e dieci gli
+    esercizi — e il cartello d'errore non si impila più a ogni tentativo.
+16. **Gli errori erano invisibili.** Sul telefono la console non esiste: un errore non
+    gestito era «l'app è piena di bug» senza poterne indicare uno. Ora qualunque errore
+    (`error` + `unhandledrejection`) finisce in un nastro rosso in fondo allo schermo, col
+    testo vero — chi lo vede può dirlo, chi lo legge può cercarlo.
+17. **«−1200» non aiuta nessuno.** Oltre i 150 centesimi dal bersaglio il quadrante ora
+    dice la nota che stai facendo e da che parte andare («sei sul La2 · sali») invece di un
+    numero a quattro cifre — e il caso tipico è l'ottava sbagliata, che capita a chiunque
+    canti su un riferimento fuori dalla propria voce.
+
+E la verifica è diventata un giro completo: il cantante sintetico ora **ascolta l'uscita
+dell'app** (analizzatore sul bus) e ricanta la melodia che ha sentito — «Melodia presa
+tutta» senza sapere in anticipo le note. Più una tortura di navigazione: 36 cambi di
+schermata in mezzo ai giri, pulsanti vivi e zero errori alla fine.
 
 ## Prima: prove 0–4 sul motore
 

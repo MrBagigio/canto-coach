@@ -96,8 +96,17 @@ function quadrante() {
       const x = Math.max(-1, Math.min(1, cent / 100));
       ago.style.opacity = '1';
       ago.style.left = `${(50 + x * 50).toFixed(1)}%`;
-      lettura.textContent = `${cent >= 0 ? '+' : '−'}${Math.abs(cent).toFixed(0)}`;
-      lettura.className = `lettura ${Math.abs(cent) <= TOLLERANZA ? 'dentro' : 'fuori'}`;
+      // Lontano dal bersaglio il numero smette di aiutare: «−1200» non dice niente a
+      // nessuno, «sei sul La2» sì — e il caso tipico è proprio l'ottava sbagliata, che
+      // capita a chiunque canti su un riferimento fuori dalla propria voce. Da lì in poi
+      // il quadrante dice la nota che stai facendo e da che parte andare.
+      if (Math.abs(cent) > 150) {
+        lettura.textContent = `sei sul ${nome(midiVicino(l.hz))} ${cent > 0 ? '· scendi' : '· sali'}`;
+        lettura.className = 'lettura fuori nota-lontana';
+      } else {
+        lettura.textContent = `${cent >= 0 ? '+' : '−'}${Math.abs(cent).toFixed(0)}`;
+        lettura.className = `lettura ${Math.abs(cent) <= TOLLERANZA ? 'dentro' : 'fuori'}`;
+      }
     },
     spegni() { ago.style.opacity = '0.25'; lettura.textContent = '—'; lettura.className = 'lettura dim'; barra.style.width = '0'; },
   };
@@ -115,12 +124,25 @@ function cartaVerdetto(v) {
 
 // ── il microfono, una volta sola ─────────────────────────────────────────────
 
+/**
+ * Apre il microfono, e va chiamata SOLO da dentro un gesto dell'utente.
+ *
+ * Prima si apriva al montaggio della schermata, e sono due errori in uno: su iPhone
+ * Safari sia il permesso del microfono sia lo sblocco dell'audio vogliono un tocco vero —
+ * fuori da lì il permesso può non comparire affatto e il contesto resta sospeso, cioè
+ * l'app sembra rotta senza nessun errore. E anche dove funziona, chiedere il microfono a
+ * uno che sta ancora leggendo cosa fa l'esercizio è il modo migliore per farselo negare.
+ * La richiesta giusta arriva quando l'utente ha appena premuto «Dammi una nota»: sta
+ * dicendo lui che vuole cantare.
+ */
+let cartaMicrofono = null;
 async function preparaMicrofono(dove) {
   if (ascolto && ascolto.flusso) return true;
-  ascolto = new Ascolto();
+  if (!ascolto) ascolto = new Ascolto();
   try {
     await audio.sblocca();
     const s = await ascolto.apri();
+    if (cartaMicrofono) { cartaMicrofono.remove(); cartaMicrofono = null; }
     if (s.guadagnoAuto) {
       const avviso = el('div', 'avviso');
       avviso.textContent = 'Il telefono tiene acceso il guadagno automatico: alza il piano e abbassa il forte da solo. L\'intonazione si misura lo stesso, il livello no.';
@@ -128,10 +150,14 @@ async function preparaMicrofono(dove) {
     }
     return true;
   } catch (e) {
-    const err = el('div', 'verdetto no');
-    err.appendChild(el('b', null, 'Il microfono non si è aperto'));
-    err.appendChild(el('p', null, `${e.name || e}. Serve il permesso del microfono, e una pagina in https (o localhost).`));
-    dove.appendChild(err);
+    // Una carta sola, aggiornata: ogni tentativo fallito che ne appende una nuova
+    // trasforma tre tocchi in tre cartelli identici impilati.
+    if (cartaMicrofono) cartaMicrofono.remove();
+    cartaMicrofono = el('div', 'verdetto no');
+    cartaMicrofono.appendChild(el('b', null, 'Il microfono non si è aperto'));
+    cartaMicrofono.appendChild(el('p', null,
+      `${e.name || e}. Serve il permesso del microfono (Impostazioni → Safari → Microfono, se l'hai negato), e una pagina in https. Riprova toccando di nuovo il pulsante.`));
+    dove.appendChild(cartaMicrofono);
     return false;
   }
 }
@@ -234,7 +260,6 @@ function palco(corpo, testoPulsante) {
 
 async function vistaNotaTenuta() {
   const corpo = schermata('Nota tenuta', 'L\'app dà la nota, poi tace. Tu la tieni ferma. Si misura quanto ci stai vicino e se cali.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Dammi una nota');
 
   let zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria;
@@ -248,6 +273,7 @@ async function vistaNotaTenuta() {
     corpo.insertBefore(nota(`Prima volta: non so ancora dove sta comoda la tua voce, e darti una nota a caso vorrebbe dire darti quella di un altro. Mugola o canta una nota qualunque, quella che ti viene senza sforzo.`), ui.quadrante.nodo);
     ui.pulsante.addEventListener('click', async function primaVolta() {
       ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
       await audio.sblocca();                // iPhone: il contesto si sblocca solo qui
       ui.stato.textContent = 'canta…';
       ui.stato.className = 'stato canta';
@@ -278,6 +304,7 @@ async function vistaNotaTenuta() {
 
   async function tondo() {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     const m = notaOppureSpiega(zona, ui, { evita: date.slice(-2) });
     if (m === null) return;
     date.push(m);
@@ -305,7 +332,6 @@ function nota(testo) {
 async function vistaEstensione() {
   const corpo = schermata('La tua estensione',
     'Per gradi, in giù e poi in su. Si chiede la più grave e la più acuta COMODE — non le più estreme: misurarla spingendo fa male alla voce, e il numero serve a essere confrontato con sé stesso, non con quello di un altro.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Comincia');
 
   const vecchia = store.leggi().estensione;
@@ -371,6 +397,7 @@ async function vistaEstensione() {
 
   async function tondo() {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     // Il pulsante compare solo QUANDO tocca a te, non mentre l'app sta ancora suonando:
     // premuto durante la nota faceva partire il giro dopo sopra quello in corso, e si
     // sentivano due note insieme — che in un'app costruita sull'alternanza è proprio la
@@ -413,13 +440,13 @@ async function vistaEstensione() {
 async function vistaAttacco() {
   const corpo = schermata('Attacco pulito',
     'Nota data, silenzio, poi tu. Il punto non è l\'intonazione: è se atterri sulla nota o ci scivoli sopra da sotto. Si misurano i primi 150 millisecondi contro il resto della TUA nota.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Dammi una nota');
   const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 55, alto: 64 };
   const date = [];
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     const m = notaOppureSpiega(zona, ui, { evita: date.slice(-2) });
     if (m === null) return;
     date.push(m);
@@ -442,12 +469,12 @@ async function vistaAttacco() {
 async function vistaIntervalli() {
   const corpo = schermata('Intervalli',
     'L\'app dà la nota di partenza, poi tace. Tu canti prima quella e poi quella a distanza chiesta. Si misura la DISTANZA che hai cantato, non l\'intonazione assoluta: se parti dieci centesimi sotto e fai una quinta esatta, la quinta è esatta.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Dammi un intervallo');
   const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 55, alto: 64 };
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     await audio.sblocca();
     const facili = INTERVALLI.filter((i) => i.facilita <= 3);
     const scelto = facili[Math.floor(Math.random() * facili.length)];
@@ -504,7 +531,6 @@ async function vistaIntervalli() {
 async function vistaFiato() {
   const corpo = schermata('Fiato',
     'Una nota sola, tenuta il più a lungo possibile. Non conta quanto fai rumore: conta quanti secondi resti DENTRO tolleranza. Una nota da venti secondi che scivola via non è fiato, è una sirena.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Dammi la nota');
   const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 55, alto: 64 };
   const storico = store.sessioniDi('fiato');
@@ -514,6 +540,7 @@ async function vistaFiato() {
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     const m = notaOppureSpiega(zona, ui);
     if (m === null) return;
     const r = await giro({
@@ -538,12 +565,12 @@ async function vistaFiato() {
 async function vistaPassaggio() {
   const corpo = schermata('Il tuo passaggio',
     'Un glissando LENTO in salita, su «u» o a bocca chiusa, dalla nota più comoda verso l\'alto. Non spingere e non cercare l\'acuto: l\'esercizio è salire piano e uniformi. E non spostare il telefono mentre sali, altrimenti quello che cambia è la distanza, non la tua voce.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Comincia il glissando');
   const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 52, alto: 64 };
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     await audio.sblocca();
     const partenza = Math.round(zona.basso);
     ui.stato.textContent = 'ascolta la nota di partenza…';
@@ -580,7 +607,6 @@ async function vistaPassaggio() {
 async function vistaAgilita() {
   const corpo = schermata('Scale e agilità',
     'Cinque note su e giù, sulla scala maggiore. L\'app le suona, poi tace: tu le ripeti. Ogni volta che la prendi pulita, la volta dopo è più veloce.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Suonami la scala');
   const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 52, alto: 62 };
   const fatte = store.sessioniDi('agilita');
@@ -590,6 +616,7 @@ async function vistaAgilita() {
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     const tonica = notaOppureSpiega({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - 7) }, ui);
     if (tonica === null) return;
     const sequenza = scalaAgilita(tonica);
@@ -685,12 +712,12 @@ function vistaOrecchio() {
 async function vistaStrumento() {
   const corpo = schermata('Canta quello che suoni',
     'Suona una nota sul tuo strumento — piano, tastiera, chitarra, ukulele, quello che hai. L\'app la riconosce, poi tace, e tu la canti. È il ponte vero fra strumento e voce, e all\'app non cambia niente quale strumento sia.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Sono pronto: suona');
   corpo.insertBefore(nota('Una nota alla volta, lasciata suonare. L\'app riconosce l\'altezza da 70 a 1300 Hz; sulle corde gravi del pianoforte legge fino a un quarto di semitono crescente — è la rigidità delle corde, non la tua — e per questo il bersaglio da cantare è il semitono temperato più vicino, non la frequenza letta.'), ui.quadrante.nodo);
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     await audio.sblocca();
     ui.stato.textContent = 'suona una nota…';
     ui.stato.className = 'stato ascolta';
@@ -735,7 +762,6 @@ const centesimiDa = (frequenza, m) => {
 async function vistaMelodia() {
   const corpo = schermata('Melodie',
     'L\'app inventa una melodia dentro la tua zona comoda, la suona, poi tace. Tu la ricanti a memoria.');
-  if (!await preparaMicrofono(corpo)) return;
   const ui = palco(corpo, 'Inventamene una');
   corpo.insertBefore(nota('Le melodie sono GENERATE, non prese da nessuna canzone: camminano sui gradi di una scala. Non è una limitazione tecnica — una melodia vera ha un autore, e questa app non ha nessun diritto di dartela.'), ui.quadrante.nodo);
   const zona = zonaComoda(store.leggi().estensione) || store.leggi().zonaProvvisoria || { basso: 52, alto: 62 };
@@ -743,6 +769,7 @@ async function vistaMelodia() {
 
   ui.pulsante.addEventListener('click', async () => {
     ui.pulsante.disabled = true;
+    if (!await preparaMicrofono(corpo)) { ui.pulsante.disabled = false; return; }
     const tonica = notaOppureSpiega({ basso: zona.basso, alto: Math.max(zona.basso, zona.alto - 8) }, ui);
     if (tonica === null) return;
     seme += 1;
@@ -888,5 +915,32 @@ function vai() {
 window.addEventListener('hashchange', vai);
 vai();
 
-// Per il collaudo in pagina.
-window.__canto = { store, rotte: Object.keys(ROTTE) };
+// ── errori visibili ──────────────────────────────────────────────────────────
+//
+// Sul telefono la console non esiste: un errore invisibile è «l'app è piena di bug»
+// senza poterne indicare uno. Qualunque errore non gestito finisce in un nastro rosso in
+// fondo allo schermo, con il testo vero — così chi lo vede può dirlo, e chi lo legge può
+// cercarlo. Il nastro si chiude con un tocco e non si impila: l'ultimo errore vince.
+const errori = [];
+let nastro = null;
+function mostraErrore(testo) {
+  errori.push({ quando: Date.now(), testo });
+  if (errori.length > 20) errori.shift();
+  if (!nastro) {
+    nastro = el('div', 'nastro-errore');
+    nastro.addEventListener('click', () => { nastro.remove(); nastro = null; });
+    document.body.appendChild(nastro);
+  }
+  nastro.textContent = `Errore: ${testo} — tocca per chiudere`;
+}
+window.addEventListener('error', (e) => {
+  mostraErrore(e.message || String(e.error || 'sconosciuto'));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason;
+  mostraErrore(r && r.message ? r.message : String(r));
+});
+
+// Per il collaudo in pagina e per la guida end-to-end (il banco deve poter ascoltare
+// l'uscita dell'app per sapere che melodia ricantare).
+window.__canto = { store, audio, errori, rotte: Object.keys(ROTTE) };
